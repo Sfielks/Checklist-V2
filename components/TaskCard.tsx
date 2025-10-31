@@ -1,10 +1,11 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, Priority } from '../types';
 import SubItem from './SubItem';
 import TextBlock from './TextBlock';
 import AttachmentBlock from './AttachmentBlock';
-import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon, DotsVerticalIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, ClipboardListIcon } from './Icons';
+import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon, DotsVerticalIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, ClipboardListIcon, FlagIcon, TagIcon, DocumentTextIcon } from './Icons';
 import ColorPalette from './ColorPalette';
 
 interface TaskCardProps {
@@ -378,7 +379,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
         <div className="flex flex-col gap-4">
             <div className={`flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-6 gap-y-3 text-sm text-gray-500 dark:text-gray-400 border-b border-t border-gray-200 dark:border-gray-700/50 py-3 -mx-5 px-5 ${isCompact ? 'hidden' : ''}`}>
               <div className="flex items-center gap-2">
-                  <label htmlFor={`priority-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">Prioridade:</label>
+                  <label htmlFor={`priority-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><FlagIcon /> Prioridade:</label>
                   <select
                       id={`priority-${task.id}`}
                       value={task.priority || 'none'}
@@ -404,7 +405,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
               </div>
               
                <div ref={categoryContainerRef} className="relative flex items-center gap-2">
-                  <label htmlFor={`category-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">#</label>
+                  <label htmlFor={`category-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300"><TagIcon /></label>
                   <input
                       id={`category-${task.id}`}
                       type="text"
@@ -500,7 +501,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 onClick={() => onAddBlock(task.id, 'text')}
                 className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
               >
-                <PlusIcon />
+                <DocumentTextIcon className="h-5 w-5"/>
                 <span>Texto</span>
               </button>
               <button

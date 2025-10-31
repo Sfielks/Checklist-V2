@@ -16,7 +16,11 @@ import {
   SpinnerIcon,
   CloudCheckIcon,
   CloudOffIcon,
-  ExclamationCircleIcon
+  ExclamationCircleIcon,
+  InboxIcon,
+  ArchiveIcon,
+  FlagIcon,
+  ArrowLeftOnRectangleIcon,
 } from './Icons';
 
 type MainView = 'active' | 'today' | 'archived';
@@ -136,9 +140,10 @@ const Sidebar: React.FC<SidebarProps> = ({
               <li>
                 <button
                   onClick={() => { setMainView('active'); onClose?.(); }}
-                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium ${mainView === 'active' ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex items-center gap-2 ${mainView === 'active' ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                 >
-                  Tarefas Ativas
+                  <InboxIcon />
+                  <span>Tarefas Ativas</span>
                 </button>
               </li>
               <li>
@@ -155,7 +160,10 @@ const Sidebar: React.FC<SidebarProps> = ({
                   onClick={() => { setMainView('archived'); onClose?.(); }}
                   className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${mainView === 'archived' ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                 >
-                  <span>Arquivadas</span>
+                  <span className="flex items-center gap-2">
+                    <ArchiveIcon />
+                    <span>Arquivadas</span>
+                  </span>
                   {archivedTaskCount > 0 && <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{archivedTaskCount}</span>}
                 </button>
               </li>
@@ -191,7 +199,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
           <div>
             <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-              <BellIcon />
+              <FlagIcon />
               <span>Prioridade</span>
             </h3>
             <ul className="space-y-1">
@@ -298,7 +306,8 @@ const Sidebar: React.FC<SidebarProps> = ({
               onClick={handleLogout}
               className="flex items-center justify-center gap-2 flex-1 text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors py-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
             >
-              Sair
+              <ArrowLeftOnRectangleIcon />
+              <span>Sair</span>
             </button>
           </div>
       </div>

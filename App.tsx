@@ -1,8 +1,9 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock, SavedAnalysis, SyncStatus } from './types';
 import TaskCard from './components/TaskCard';
-import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon, SparklesIcon, BookmarkIcon, MicrophoneIcon, SearchIcon, ViewGridIcon, ViewListIcon } from './components/Icons';
+import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon, SparklesIcon, BookmarkIcon, MicrophoneIcon, SearchIcon, ViewGridIcon, ViewListIcon, ExclamationTriangleIcon, InboxIcon, ChevronDownIcon } from './components/Icons';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SettingsModal from './components/SettingsModal';
 import PanoramaModal from './components/PanoramaModal';
@@ -67,6 +68,7 @@ type View = 'home' | 'checklist';
 type User = { id: string; name: string };
 type LayoutMode = 'grid' | 'list';
 type MainView = 'active' | 'today' | 'archived';
+type SearchScope = 'all' | 'title' | 'content' | 'category';
 
 interface BackupData {
   version: number;
@@ -265,6 +267,9 @@ const App: React.FC = () => {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [newlyCreatedTaskId, setNewlyCreatedTaskId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchScope, setSearchScope] = useState<SearchScope>('all');
+  const [isSearchScopeDropdownOpen, setIsSearchScopeDropdownOpen] = useState(false);
+  const searchScopeDropdownRef = useRef<HTMLDivElement>(null);
   const [recentlyDeleted, setRecentlyDeleted] = useState<{ block: ContentBlock; taskId: string; originalTaskContent: ContentBlock[] } | null>(null);
   const undoTimeoutRef = useRef<number | null>(null);
   const [importFileData, setImportFileData] = useState<BackupData | null>(null);
@@ -464,6 +469,19 @@ const App: React.FC = () => {
 
     return () => clearInterval(checkInterval);
   }, [tasks, notificationPermission, view]);
+
+    // Effect for closing search scope dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchScopeDropdownRef.current && !searchScopeDropdownRef.current.contains(event.target as Node)) {
+        setIsSearchScopeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const loadAndSyncTasks = async (userId: string) => {
     setSyncStatus('syncing');
@@ -1084,6 +1102,13 @@ const App: React.FC = () => {
     setTheme(newTheme);
   };
 
+  const searchScopeOptions: Record<SearchScope, string> = {
+    all: 'Tudo',
+    title: 'Título',
+    content: 'Conteúdo',
+    category: 'Categoria',
+  };
+
   const filteredTasks = tasks.filter((task) => {
     const todayStr = new Date().toISOString().split('T')[0];
 
@@ -1136,20 +1161,35 @@ const App: React.FC = () => {
         return false;
     };
 
-    const isSearchMatch =
-        task.title.toLowerCase().includes(searchLower) ||
-        (task.category && task.category.toLowerCase().includes(searchLower)) ||
-        checkContent(task.content);
+    let isSearchMatch = false;
+    switch (searchScope) {
+        case 'title':
+            isSearchMatch = task.title.toLowerCase().includes(searchLower);
+            break;
+        case 'content':
+            isSearchMatch = checkContent(task.content);
+            break;
+        case 'category':
+            isSearchMatch = task.category?.toLowerCase().includes(searchLower) ?? false;
+            break;
+        case 'all':
+        default:
+            isSearchMatch = task.title.toLowerCase().includes(searchLower) ||
+                            (task.category && task.category.toLowerCase().includes(searchLower)) ||
+                            checkContent(task.content);
+            break;
+    }
     
     return isViewMatch && isPriorityMatch && isCategoryMatch && isStatusMatch() && isSearchMatch;
   });
 
   const archivedTaskCount = tasks.filter(t => t.archived).length;
-  const pageTitle = (() => {
-    if (mainView === 'archived') return 'Tarefas Arquivadas';
-    if (mainView === 'today') return 'Tarefas para Hoje';
-    if (categoryFilter !== 'all') return categoryFilter;
-    return 'Suas Tarefas';
+  
+  const { pageTitle, pageIcon } = (() => {
+    if (mainView === 'archived') return { pageTitle: 'Tarefas Arquivadas', pageIcon: <ArchiveIcon className="h-7 w-7" /> };
+    if (mainView === 'today') return { pageTitle: 'Tarefas para Hoje', pageIcon: <BellIcon className="h-7 w-7" /> };
+    if (categoryFilter !== 'all') return { pageTitle: categoryFilter, pageIcon: <TagIcon className="h-7 w-7" /> };
+    return { pageTitle: 'Suas Tarefas', pageIcon: <InboxIcon className="h-7 w-7" /> };
   })();
 
 
@@ -1242,6 +1282,7 @@ const App: React.FC = () => {
         onConfirm={handleConfirmDelete}
         title="Excluir Tarefa"
         message="Tem certeza de que deseja excluir esta tarefa permanentemente? Esta ação não pode ser desfeita."
+        icon={<TrashIcon className="h-6 w-6 text-red-500" />}
       />
 
       <ConfirmationDialog
@@ -1250,6 +1291,7 @@ const App: React.FC = () => {
         onConfirm={handleConfirmDeleteCategory}
         title="Excluir Categoria"
         message={`Tem certeza de que deseja excluir a categoria "${categoryToDelete}"? Esta ação removerá a categoria de todas as tarefas associadas, mas não excluirá as tarefas em si.`}
+        icon={<TrashIcon className="h-6 w-6 text-red-500" />}
       />
 
        <ConfirmationDialog
@@ -1258,6 +1300,7 @@ const App: React.FC = () => {
         onConfirm={handleConfirmDeleteAnalysis}
         title="Excluir Análise"
         message="Tem certeza de que deseja excluir esta análise salva? Esta ação é irreversível."
+        icon={<TrashIcon className="h-6 w-6 text-red-500" />}
       />
 
       <ConfirmationDialog
@@ -1266,6 +1309,7 @@ const App: React.FC = () => {
           onConfirm={handleConfirmReset}
           title="Redefinir Aplicativo"
           message="Tem certeza de que deseja excluir TODOS os dados? Esta ação é irreversível."
+          icon={<ExclamationTriangleIcon className="h-6 w-6 text-yellow-500" />}
       />
 
       <SettingsModal
@@ -1346,13 +1390,18 @@ const App: React.FC = () => {
                 <button onClick={() => setIsDrawerOpen(true)} className="lg:hidden p-2 -ml-2 text-gray-600 dark:text-gray-300">
                     <MenuIcon />
                 </button>
-                <div className="flex-1 min-w-0">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200 truncate" title={pageTitle}>
-                        {pageTitle}
-                    </h1>
-                    <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">
-                        {filteredTasks.length} tarefa{filteredTasks.length !== 1 ? 's' : ''}
-                    </p>
+                <div className="flex-1 min-w-0 flex items-center gap-3">
+                    <div className="text-gray-400 dark:text-gray-500 flex-shrink-0">
+                      {pageIcon}
+                    </div>
+                    <div className="min-w-0">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200 truncate" title={pageTitle}>
+                            {pageTitle}
+                        </h1>
+                        <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">
+                            {filteredTasks.length} tarefa{filteredTasks.length !== 1 ? 's' : ''}
+                        </p>
+                    </div>
                 </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -1401,25 +1450,56 @@ const App: React.FC = () => {
           </header>
 
           <div className="px-4 sm:px-6 lg:px-0 mb-6">
-            <div className="relative">
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                  <SearchIcon className="h-5 w-5 text-gray-400" />
+            <div className="flex items-center gap-2">
+              <div className="relative flex-grow">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                      <SearchIcon className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder={searchScope === 'all' ? 'Buscar tarefas...' : `Buscar por ${searchScopeOptions[searchScope].toLowerCase()}...`}
+                      className="block w-full rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800 py-2.5 pl-10 pr-10 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50 sm:text-sm"
+                  />
+                  {searchQuery && (
+                      <button
+                          onClick={() => setSearchQuery('')}
+                          className="absolute inset-y-0 right-0 flex items-center pr-3"
+                      >
+                          <XCircleIcon className="h-5 w-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" />
+                      </button>
+                  )}
               </div>
-              <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar tarefas por título, conteúdo ou categoria..."
-                  className="block w-full rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800 py-2.5 pl-10 pr-10 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50 sm:text-sm"
-              />
-              {searchQuery && (
-                  <button
-                      onClick={() => setSearchQuery('')}
-                      className="absolute inset-y-0 right-0 flex items-center pr-3"
+              <div className="relative">
+                <button
+                  onClick={() => setIsSearchScopeDropdownOpen(prev => !prev)}
+                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-sm text-sm"
                   >
-                      <XCircleIcon className="h-5 w-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" />
-                  </button>
-              )}
+                  <span>{searchScopeOptions[searchScope]}</span>
+                  <ChevronDownIcon className={`h-4 w-4 text-gray-500 transition-transform ${isSearchScopeDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {isSearchScopeDropdownOpen && (
+                  <div ref={searchScopeDropdownRef} className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 z-30 overflow-hidden animate-fade-in-scale">
+                    <ul className="p-1">
+                      {Object.entries(searchScopeOptions).map(([key, label]) => (
+                        <li key={key}>
+                          <button
+                            onClick={() => {
+                              setSearchScope(key as SearchScope);
+                              setIsSearchScopeDropdownOpen(false);
+                            }}
+                            className="w-full text-left flex items-center justify-between px-3 py-2 text-sm rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
+                          >
+                            <span>{label}</span>
+                            {searchScope === key && <CheckCircleIcon className="h-4 w-4 text-teal-500" />}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1456,8 +1536,11 @@ const App: React.FC = () => {
             </div>
 
             {filteredTasks.length === 0 && (
-              <div className="text-center py-20">
-                <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300">
+              <div className="text-center py-20 flex flex-col items-center">
+                <div className="p-6 bg-gray-200 dark:bg-gray-800/50 rounded-full">
+                    <InboxIcon className="h-24 w-24 text-gray-400 dark:text-gray-500" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mt-6">
                   {searchQuery ? 'Nenhum Resultado Encontrado' : 'Tudo limpo por aqui!'}
                 </h3>
                 <p className="text-gray-500 dark:text-gray-400 mt-2">
