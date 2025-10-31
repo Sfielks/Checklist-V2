@@ -478,16 +478,6 @@ const App: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'in-progress'>('all');
 
   useEffect(() => {
-    AppleID.auth.init({
-      clientId: import.meta.env.VITE_APPLE_CLIENT_ID,
-      scope: 'name email',
-      redirectURI: import.meta.env.VITE_APPLE_REDIRECT_URI,
-      state: import.meta.env.VITE_APPLE_STATE,
-      usePopup: true,
-    });
-  }, []);
-
-  useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
@@ -577,17 +567,11 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAppleLogin = async () => {
-    try {
-      const data = await AppleID.auth.signIn();
-      const { user } = data;
-      const mockUser = { id: data.authorization.id_token, name: user ? `${user.name.firstName} ${user.name.lastName}` : 'Usuário Apple' };
-      setUser(mockUser);
-      loadAndSyncTasks(mockUser.id);
-      setView('checklist');
-    } catch (error) {
-      console.error(error);
-    }
+  const handleAppleLogin = () => {
+    const mockUser = { id: 'apple-user-123', name: 'Usuário Apple' };
+    setUser(mockUser);
+    loadAndSyncTasks(mockUser.id);
+    setView('checklist');
   };
 
   const handleGuestLogin = () => {
