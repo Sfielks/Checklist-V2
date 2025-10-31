@@ -1,6 +1,15 @@
 
 import React from 'react';
 
+/**
+ * @interface ConfirmationDialogProps
+ * @description Props for the ConfirmationDialog component.
+ * @property {boolean} isOpen - Whether the dialog is open.
+ * @property {() => void} onClose - Function to call when the dialog is closed.
+ * @property {() => void} onConfirm - Function to call when the action is confirmed.
+ * @property {string} title - The title of the dialog.
+ * @property {string} message - The message to display in the dialog.
+ */
 interface ConfirmationDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -9,6 +18,11 @@ interface ConfirmationDialogProps {
   message: string;
 }
 
+/**
+ * A component that displays a confirmation dialog.
+ * @param {ConfirmationDialogProps} props - The component props.
+ * @returns {React.ReactElement | null} The rendered confirmation dialog or null if it is not open.
+ */
 const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({ isOpen, onClose, onConfirm, title, message }) => {
   if (!isOpen) return null;
 

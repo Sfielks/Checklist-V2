@@ -3,6 +3,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import { TextBlock as TextBlockType } from '../types';
 import { TrashIcon, GripVerticalIcon } from './Icons';
 
+/**
+ * @interface TextBlockProps
+ * @description Props for the TextBlock component.
+ * @property {TextBlockType} block - The text block data.
+ * @property {(id: string, text: string) => void} onUpdate - Function to call when the text block is updated.
+ * @property {(id: string) => void} onDelete - Function to call when the text block is deleted.
+ * @property {(sourceId: string, targetId: string, position: 'before' | 'after') => void} onMoveBlock - Function to call when the block is moved.
+ */
 interface TextBlockProps {
   block: TextBlockType;
   onUpdate: (id: string, text: string) => void;
@@ -10,6 +18,11 @@ interface TextBlockProps {
   onMoveBlock: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
 }
 
+/**
+ * Parses a markdown-like text string and converts it to HTML.
+ * @param {string} text - The text to parse.
+ * @returns {string} The parsed HTML string.
+ */
 const parseMarkdown = (text: string): string => {
   const lines = text.split('\n');
   let html = '';
@@ -62,7 +75,11 @@ const parseMarkdown = (text: string): string => {
     .replace(/~~(.*?)~~/g, '<del>$1</del>');
 };
 
-
+/**
+ * A component that displays a text block within a task.
+ * @param {TextBlockProps} props - The component props.
+ * @returns {React.ReactElement} The rendered text block component.
+ */
 const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMoveBlock }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(block.text);
@@ -76,12 +93,19 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
     }
   }, [isEditing]);
   
+  /**
+   * Handles the change event for the textarea.
+   * @param {React.ChangeEvent<HTMLTextAreaElement>} e - The change event.
+   */
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setText(e.target.value);
       e.target.style.height = 'auto';
       e.target.style.height = `${e.target.scrollHeight}px`;
   }
 
+  /**
+   * Handles the blur event for the textarea.
+   */
   const handleBlur = () => {
     setIsEditing(false);
     if (text.trim() === '') {
@@ -91,6 +115,10 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
     }
   };
 
+  /**
+   * Handles the key down event for the textarea.
+   * @param {React.KeyboardEvent<HTMLTextAreaElement>} e - The key down event.
+   */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -102,11 +130,19 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
       setText(block.text);
   }, [block.text])
   
+  /**
+   * Handles the start of a drag event.
+   * @param {React.DragEvent} e - The drag event.
+   */
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('text/plain', block.id);
     e.dataTransfer.effectAllowed = 'move';
   };
 
+  /**
+   * Handles a drag over event to determine the drop position.
+   * @param {React.DragEvent} e - The drag event.
+   */
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
@@ -114,10 +150,17 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
     setDragOverPosition(e.clientY < midpoint ? 'top' : 'bottom');
   };
 
+  /**
+   * Handles a drag leave event to reset the drop position.
+   */
   const handleDragLeave = () => {
     setDragOverPosition(null);
   };
 
+  /**
+   * Handles a drop event to move the block.
+   * @param {React.DragEvent} e - The drop event.
+   */
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const sourceId = e.dataTransfer.getData('text/plain');

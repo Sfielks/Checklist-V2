@@ -2,8 +2,25 @@
 import React, { useRef } from 'react';
 import { XIcon, SunIcon, MoonIcon, BellIcon, CheckCircleIcon, XCircleIcon } from './Icons';
 
+/**
+ * @typedef {'light' | 'dark'} Theme
+ * @description Represents the possible themes for the application.
+ */
 type Theme = 'light' | 'dark';
 
+/**
+ * @interface SettingsModalProps
+ * @description Props for the SettingsModal component.
+ * @property {boolean} isOpen - Whether the modal is open.
+ * @property {() => void} onClose - Function to call when the modal is closed.
+ * @property {() => void} onExport - Function to call when the export button is clicked.
+ * @property {(event: React.ChangeEvent<HTMLInputElement>) => void} onImport - Function to call when a file is imported.
+ * @property {() => void} onReset - Function to call when the reset button is clicked.
+ * @property {Theme} theme - The current theme of the application.
+ * @property {(theme: Theme) => void} onThemeChange - Function to call when the theme is changed.
+ * @property {NotificationPermission} notificationPermission - The current notification permission status.
+ * @property {() => void} onRequestNotificationPermission - Function to call to request notification permission.
+ */
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -16,6 +33,11 @@ interface SettingsModalProps {
   onRequestNotificationPermission: () => void;
 }
 
+/**
+ * A component that displays a settings modal.
+ * @param {SettingsModalProps} props - The component props.
+ * @returns {React.ReactElement | null} The rendered settings modal or null if it is not open.
+ */
 const SettingsModal: React.FC<SettingsModalProps> = ({ 
     isOpen, 
     onClose, 
@@ -31,6 +53,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
+  /**
+   * Handles the click event for the import button.
+   */
   const handleImportClick = () => {
     fileInputRef.current?.click();
   };

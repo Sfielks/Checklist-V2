@@ -1,10 +1,20 @@
 
 import React from 'react';
 
+/**
+ * @interface ColorPaletteProps
+ * @description Props for the ColorPalette component.
+ * @property {(color: string | undefined) => void} onSelectColor - Function to call when a color is selected.
+ */
 interface ColorPaletteProps {
   onSelectColor: (color: string | undefined) => void;
 }
 
+/**
+ * @constant colors
+ * @description An array of predefined colors for the palette.
+ * @type {(string | undefined)[]}
+ */
 const colors = [
   undefined,    // Default color
   '#fca5a5', // Red light
@@ -17,6 +27,11 @@ const colors = [
   '#f9a8d4', // Pink light
 ];
 
+/**
+ * A component that displays a color palette for color selection.
+ * @param {ColorPaletteProps} props - The component props.
+ * @returns {React.ReactElement} The rendered color palette component.
+ */
 const ColorPalette: React.FC<ColorPaletteProps> = ({ onSelectColor }) => {
   return (
     <div className="absolute top-full right-0 mt-2 z-20 bg-white dark:bg-gray-700 p-3 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-600 w-40">

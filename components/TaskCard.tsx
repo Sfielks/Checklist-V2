@@ -7,6 +7,23 @@ import AttachmentBlock from './AttachmentBlock';
 import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon } from './Icons';
 import ColorPalette from './ColorPalette';
 
+/**
+ * @interface TaskCardProps
+ * @description Props for the TaskCard component.
+ * @property {TaskType} task - The task data to display.
+ * @property {string[]} categories - The list of available categories.
+ * @property {(id: string, title: string) => void} onUpdateTitle - Function to call when the task title is updated.
+ * @property {(id: string) => void} onDeleteTask - Function to call when the task is deleted.
+ * @property {(taskId: string, type: 'subitem' | 'text') => void} onAddBlock - Function to call when a new content block is added.
+ * @property {(taskId: string, file: File) => void} onAddAttachment - Function to call when an attachment is added.
+ * @property {(taskId: string, blockId: string, updates: Partial<ContentBlock>) => void} onUpdateBlock - Function to call when a content block is updated.
+ * @property {(taskId: string, blockId: string) => void} onDeleteBlock - Function to call when a content block is deleted.
+ * @property {(taskId: string, subItemId: string) => void} onToggleSubItem - Function to call when a sub-item is toggled.
+ * @property {(taskId: string, parentId: string) => void} onAddNestedSubItem - Function to call when a nested sub-item is added.
+ * @property {(id: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category' | 'color'>>) => void} onUpdateDetails - Function to call when task details are updated.
+ * @property {(id: string) => void} onToggleArchive - Function to call when the task's archive status is toggled.
+ * @property {(taskId: string, sourceId: string, targetId: string | null, position: 'before' | 'after' | 'end') => void} onMoveBlock - Function to call when a content block is moved.
+ */
 interface TaskCardProps {
   task: TaskType;
   categories: string[];
@@ -23,6 +40,11 @@ interface TaskCardProps {
   onMoveBlock: (taskId: string, sourceId: string, targetId: string | null, position: 'before' | 'after' | 'end') => void;
 }
 
+/**
+ * @constant priorityConfig
+ * @description Configuration for task priorities.
+ * @type {Record<Priority, { label: string; ringColor: string }>}
+ */
 const priorityConfig: Record<Priority, { label: string; ringColor: string }> = {
     none: { label: 'Nenhuma', ringColor: 'focus:ring-gray-500' },
     low: { label: 'Baixa', ringColor: 'focus:ring-blue-400' },
@@ -31,6 +53,11 @@ const priorityConfig: Record<Priority, { label: string; ringColor: string }> = {
     urgent: { label: 'Urgente', ringColor: 'focus:ring-red-500' },
 };
 
+/**
+ * Counts the total and completed sub-items in a content block array.
+ * @param {ContentBlock[]} items - The array of content blocks.
+ * @returns {{ total: number; completed: number }} An object with the total and completed counts.
+ */
 const countSubItems = (items: ContentBlock[]): { total: number; completed: number } => {
     let total = 0;
     let completed = 0;
@@ -46,7 +73,11 @@ const countSubItems = (items: ContentBlock[]): { total: number; completed: numbe
     return { total, completed };
 };
 
-
+/**
+ * A component that displays a task card with its details and content.
+ * @param {TaskCardProps} props - The component props.
+ * @returns {React.ReactElement} The rendered task card component.
+ */
 const TaskCard: React.FC<TaskCardProps> = ({
   task,
   categories,
@@ -102,7 +133,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
     setCategoryValue(task.category || '');
   }, [task.category]);
 
-
+  /**
+   * Handles the blur event for the title input.
+   */
   const handleTitleBlur = () => {
     setIsEditingTitle(false);
     if(title.trim() === '') {
@@ -112,16 +145,28 @@ const TaskCard: React.FC<TaskCardProps> = ({
     }
   };
 
+  /**
+   * Handles the key down event for the title input.
+   * @param {React.KeyboardEvent<HTMLInputElement>} e - The key down event.
+   */
   const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handleTitleBlur();
     }
   };
   
+  /**
+   * Handles the drag over event for the content area.
+   * @param {React.DragEvent} e - The drag event.
+   */
   const handleContentDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
 
+  /**
+   * Handles the drop event for the content area.
+   * @param {React.DragEvent} e - The drop event.
+   */
   const handleContentDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const sourceId = e.dataTransfer.getData('text/plain');
@@ -138,17 +183,29 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const { total: totalSubItems, completed: completedSubItems } = countSubItems(task.content);
   const progress = totalSubItems > 0 ? (completedSubItems / totalSubItems) * 100 : 0;
   
+  /**
+   * Handles the selection of a color from the color palette.
+   * @param {string | undefined} color - The selected color.
+   */
   const handleSelectColor = (color: string | undefined) => {
     onUpdateDetails(task.id, { color });
     setShowColorPalette(false);
   };
   
+  /**
+   * Handles the selection of a category.
+   * @param {string} category - The selected category.
+   */
   const handleSelectCategory = (category: string) => {
     setCategoryValue(category);
     onUpdateDetails(task.id, { category });
     setIsCategoryFocused(false);
   };
   
+  /**
+   * Handles the key down event for the category input.
+   * @param {React.KeyboardEvent<HTMLInputElement>} e - The key down event.
+   */
   const handleCategoryKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       if (categoryValue.trim() !== (task.category || '')) {
@@ -163,10 +220,17 @@ const TaskCard: React.FC<TaskCardProps> = ({
     }
   };
 
+  /**
+   * Handles the click event for the add attachment button.
+   */
   const handleAddAttachmentClick = () => {
     attachmentInputRef.current?.click();
   };
 
+  /**
+   * Handles the file change event for the attachment input.
+   * @param {React.ChangeEvent<HTMLInputElement>} e - The file change event.
+   */
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       onAddAttachment(task.id, e.target.files[0]);

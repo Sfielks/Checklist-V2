@@ -2,12 +2,24 @@ import React, { useState } from 'react';
 import { AttachmentBlock as AttachmentBlockType } from '../types';
 import { TrashIcon, GripVerticalIcon, DocumentTextIcon, DownloadIcon } from './Icons';
 
+/**
+ * @interface AttachmentBlockProps
+ * @description Props for the AttachmentBlock component.
+ * @property {AttachmentBlockType} block - The attachment block data.
+ * @property {(id: string) => void} onDelete - Function to call when the attachment is deleted.
+ * @property {(sourceId: string, targetId: string, position: 'before' | 'after') => void} onMoveBlock - Function to call when the block is moved.
+ */
 interface AttachmentBlockProps {
   block: AttachmentBlockType;
   onDelete: (id: string) => void;
   onMoveBlock: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
 }
 
+/**
+ * Formats a file size in bytes into a human-readable string.
+ * @param {number} bytes - The file size in bytes.
+ * @returns {string} The formatted file size string.
+ */
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes';
   const k = 1024;
@@ -16,16 +28,29 @@ const formatFileSize = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
+/**
+ * A component that displays an attachment block within a task.
+ * @param {AttachmentBlockProps} props - The component props.
+ * @returns {React.ReactElement} The rendered attachment block component.
+ */
 const AttachmentBlock: React.FC<AttachmentBlockProps> = ({ block, onDelete, onMoveBlock }) => {
   const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | null>(null);
 
   const isImage = block.fileType.startsWith('image/');
 
+  /**
+   * Handles the start of a drag event.
+   * @param {React.DragEvent} e - The drag event.
+   */
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('text/plain', block.id);
     e.dataTransfer.effectAllowed = 'move';
   };
 
+  /**
+   * Handles a drag over event to determine the drop position.
+   * @param {React.DragEvent} e - The drag event.
+   */
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
@@ -33,10 +58,17 @@ const AttachmentBlock: React.FC<AttachmentBlockProps> = ({ block, onDelete, onMo
     setDragOverPosition(e.clientY < midpoint ? 'top' : 'bottom');
   };
 
+  /**
+   * Handles a drag leave event to reset the drop position.
+   */
   const handleDragLeave = () => {
     setDragOverPosition(null);
   };
 
+  /**
+   * Handles a drop event to move the block.
+   * @param {React.DragEvent} e - The drop event.
+   */
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const sourceId = e.dataTransfer.getData('text/plain');

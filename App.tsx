@@ -6,6 +6,11 @@ import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, S
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SettingsModal from './components/SettingsModal';
 
+/**
+ * @constant initialTasks
+ * @description Initial set of tasks for the checklist application.
+ * @type {TaskType[]}
+ */
 const initialTasks: TaskType[] = [
   {
     id: '1',
@@ -47,19 +52,60 @@ const initialTasks: TaskType[] = [
     archived: false,
   },
 ];
-
+/**
+ * @constant LOCAL_STORAGE_KEY
+ * @description Key for storing tasks in local storage for guest users.
+ * @type {string}
+ */
 const LOCAL_STORAGE_KEY = 'checklist-app-tasks-guest';
+/**
+ * @constant CLOUD_STORAGE_KEY_PREFIX
+ * @description Prefix for storing tasks in cloud storage.
+ * @type {string}
+ */
 const CLOUD_STORAGE_KEY_PREFIX = 'checklist-app-cloud-';
+/**
+ * @constant THEME_STORAGE_KEY
+ * @description Key for storing the selected theme in local storage.
+ * @type {string}
+ */
 const THEME_STORAGE_KEY = 'checklist-app-theme';
 
+/**
+ * @typedef {'light' | 'dark'} Theme
+ * @description Represents the possible themes for the application.
+ */
 type Theme = 'light' | 'dark';
+/**
+ * @typedef {'home' | 'checklist'} View
+ * @description Represents the possible views in the application.
+ */
 type View = 'home' | 'checklist';
+/**
+ * @typedef {object} User
+ * @description Represents a user of the application.
+ * @property {string} id - The unique identifier for the user.
+ * @property {string} name - The name of the user.
+ */
 type User = { id: string; name: string };
+/**
+ * @typedef {'syncing' | 'saved' | 'offline' | 'error'} SyncStatus
+ * @description Represents the synchronization status of the application data.
+ */
 type SyncStatus = 'syncing' | 'saved' | 'offline' | 'error';
 
 
-// Mock Cloud Storage API
+/**
+ * @constant cloudStorage
+ * @description Mock Cloud Storage API for saving and loading tasks.
+ */
 const cloudStorage = {
+  /**
+   * Saves tasks to the mock cloud storage.
+   * @param {string} userId - The ID of the user.
+   * @param {TaskType[]} tasks - The array of tasks to save.
+   * @returns {Promise<void>} A promise that resolves when the tasks are saved.
+   */
   saveTasks: async (userId: string, tasks: TaskType[]): Promise<void> => {
     console.log(`Simulating save to cloud for user ${userId}...`);
     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
@@ -71,6 +117,11 @@ const cloudStorage = {
       throw new Error('Failed to save to cloud');
     }
   },
+  /**
+   * Loads tasks from the mock cloud storage.
+   * @param {string} userId - The ID of the user.
+   * @returns {Promise<TaskType[] | null>} A promise that resolves with the loaded tasks or null if no tasks are found.
+   */
   loadTasks: async (userId: string): Promise<TaskType[] | null> => {
     console.log(`Simulating load from cloud for user ${userId}...`);
     await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
@@ -89,6 +140,12 @@ const cloudStorage = {
   },
 };
 
+/**
+ * A component that displays the synchronization status.
+ * @param {object} props - The component props.
+ * @param {SyncStatus} props.status - The current synchronization status.
+ * @returns {React.ReactElement} The rendered component.
+ */
 const SyncStatusIndicator: React.FC<{ status: SyncStatus }> = ({ status }) => {
     const statusConfig: Record<SyncStatus, { icon: React.ReactNode; text: string; color: string }> = {
       syncing: {
@@ -124,7 +181,13 @@ const SyncStatusIndicator: React.FC<{ status: SyncStatus }> = ({ status }) => {
 };
 
 
-// Recursive helper functions for deep state manipulation
+/**
+ * Recursively maps over a content tree and applies a transformation to a target subitem.
+ * @param {ContentBlock[]} content - The array of content blocks to map over.
+ * @param {string} targetId - The ID of the target subitem.
+ * @param {function(SubItemBlock): SubItemBlock} transform - The transformation function to apply.
+ * @returns {[ContentBlock[], boolean]} A tuple containing the new content tree and a boolean indicating if the target was found.
+ */
 const mapContentTree = (content: ContentBlock[], targetId: string, transform: (block: SubItemBlock) => SubItemBlock): [ContentBlock[], boolean] => {
   let found = false;
   const newContent = content.map(block => {
@@ -144,7 +207,12 @@ const mapContentTree = (content: ContentBlock[], targetId: string, transform: (b
   });
   return [newContent, found];
 };
-
+/**
+ * Recursively filters a content tree to remove a target block.
+ * @param {ContentBlock[]} content - The array of content blocks to filter.
+ * @param {string} targetId - The ID of the block to remove.
+ * @returns {[ContentBlock[], boolean]} A tuple containing the new content tree and a boolean indicating if the target was found and removed.
+ */
 const filterContentTree = (content: ContentBlock[], targetId: string): [ContentBlock[], boolean] => {
   let found = false;
   const newContent = content.filter(block => {
@@ -166,7 +234,11 @@ const filterContentTree = (content: ContentBlock[], targetId: string): [ContentB
   });
   return [newContent, found];
 };
-
+/**
+ * Migrates old content data structure to the new structure.
+ * @param {any[]} items - The array of items to migrate.
+ * @returns {ContentBlock[]} The migrated content blocks.
+ */
 const migrateContent = (items: any[]): ContentBlock[] => {
     return items.map(item => {
         if (item.type === 'subitem') {
@@ -180,7 +252,11 @@ const migrateContent = (items: any[]): ContentBlock[] => {
     });
 };
 
-
+/**
+ * @constant priorityOptions
+ * @description A record of priority options and their corresponding labels.
+ * @type {Record<Priority | 'all', string>}
+ */
 const priorityOptions: Record<Priority | 'all', string> = {
     all: 'Todas as Prioridades',
     none: 'Nenhuma',
@@ -190,13 +266,24 @@ const priorityOptions: Record<Priority | 'all', string> = {
     urgent: 'Urgente',
 };
 
+/**
+ * @constant statusOptions
+ * @description A record of status options and their corresponding labels.
+ * @type {Record<'all' | 'completed' | 'in-progress', string>}
+ */
 const statusOptions: Record<'all' | 'completed' | 'in-progress', string> = {
     all: 'Todos os Status',
     'in-progress': 'Em Andamento',
     completed: 'Concluído',
 };
 
-
+/**
+ * A component that displays the home screen of the application.
+ * @param {object} props - The component props.
+ * @param {() => void} props.onAppleLogin - The function to call when the Apple login button is clicked.
+ * @param {() => void} props.onGuestLogin - The function to call when the guest login button is clicked.
+ * @returns {React.ReactElement} The rendered component.
+ */
 const HomeScreen = ({ onAppleLogin, onGuestLogin }: { onAppleLogin: () => void; onGuestLogin: () => void; }) => (
   <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white flex flex-col items-center justify-center p-4 text-center transition-colors duration-300">
     <div className="max-w-2xl">
@@ -227,7 +314,30 @@ const HomeScreen = ({ onAppleLogin, onGuestLogin }: { onAppleLogin: () => void; 
     </div>
   </div>
 );
-
+/**
+ * A component that displays the content of the sidebar.
+ * @param {object} props - The component props.
+ * @param {function(boolean): void} props.setIsSettingsOpen - Function to set the settings modal's open state.
+ * @param {boolean} props.showArchived - Whether to show archived tasks.
+ * @param {function(boolean): void} props.setShowArchived - Function to set whether to show archived tasks.
+ * @param {number} props.archivedTaskCount - The number of archived tasks.
+ * @param {string} props.categoryFilter - The current category filter.
+ * @param {function(string): void} props.setCategoryFilter - Function to set the category filter.
+ * @param {Priority | 'all'} props.priorityFilter - The current priority filter.
+ * @param {function(Priority | 'all'): void} props.setPriorityFilter - Function to set the priority filter.
+ * @param {TaskType[]} props.tasks - The array of tasks.
+ * @param {string[]} props.categories - The array of categories.
+ * @param {function(string): void} props.handleDeleteCategory - Function to handle deleting a category.
+ * @param {boolean} props.isAddingCategory - Whether the user is adding a new category.
+ * @param {function(boolean): void} props.setIsAddingCategory - Function to set whether the user is adding a new category.
+ * @param {string} props.newCategoryName - The name of the new category being added.
+ * @param {function(string): void} props.setNewCategoryName - Function to set the name of the new category.
+ * @param {() => void} props.handleAddCategory - Function to handle adding a new category.
+ * @param {SyncStatus} props.syncStatus - The current synchronization status.
+ * @param {() => void} props.handleLogout - Function to handle user logout.
+ * @param {() => void} [props.onClose] - Optional function to call when the sidebar is closed.
+ * @returns {React.ReactElement} The rendered component.
+ */
 const SidebarContent: React.FC<{
   setIsSettingsOpen: (isOpen: boolean) => void;
   showArchived: boolean;
@@ -411,7 +521,10 @@ const SidebarContent: React.FC<{
   );
 };
 
-
+/**
+ * The main component of the application.
+ * @returns {React.ReactElement} The rendered component.
+ */
 const App: React.FC = () => {
   const [view, setView] = useState<View>('home');
   const [user, setUser] = useState<User | null>(null);
@@ -547,7 +660,11 @@ const App: React.FC = () => {
 
     return () => clearInterval(checkInterval);
   }, [tasks, notificationPermission, view]);
-
+/**
+ * Loads and synchronizes tasks from the cloud.
+ * @param {string} userId - The ID of the user.
+ * @returns {Promise<void>} A promise that resolves when the tasks are loaded and synchronized.
+ */
   const loadAndSyncTasks = async (userId: string) => {
     setSyncStatus('syncing');
     try {
@@ -566,20 +683,26 @@ const App: React.FC = () => {
         alert("Não foi possível carregar os dados da nuvem. Verifique sua conexão e tente novamente.");
     }
   };
-
+/**
+ * Handles the Apple login process.
+ */
   const handleAppleLogin = () => {
     const mockUser = { id: 'apple-user-123', name: 'Usuário Apple' };
     setUser(mockUser);
     loadAndSyncTasks(mockUser.id);
     setView('checklist');
   };
-
+/**
+ * Handles the guest login process.
+ */
   const handleGuestLogin = () => {
     setUser(null);
     setSyncStatus('offline');
     setView('checklist');
   };
-
+/**
+ * Handles the user logout process.
+ */
   const handleLogout = () => {
     setUser(null);
     setSyncStatus('offline');
@@ -588,7 +711,9 @@ const App: React.FC = () => {
     setTasks(savedTasks ? JSON.parse(savedTasks) : initialTasks);
     setView('home');
   };
-
+/**
+ * Adds a new task to the list.
+ */
   const handleAddTask = () => {
     const newTask: TaskType = {
       id: Date.now().toString(),
@@ -601,21 +726,31 @@ const App: React.FC = () => {
     };
     setTasks([newTask, ...tasks]);
   };
-
+/**
+ * Sets the ID of the task to be deleted.
+ * @param {string} taskId - The ID of the task to delete.
+ */
   const handleDeleteTask = (taskId: string) => {
     setTaskToDeleteId(taskId);
   };
-
+/**
+ * Confirms and deletes the selected task.
+ */
   const handleConfirmDelete = () => {
     if (!taskToDeleteId) return;
     setTasks(tasks.filter((task) => task.id !== taskToDeleteId));
     setTaskToDeleteId(null);
   };
-
+/**
+ * Cancels the task deletion process.
+ */
   const handleCancelDelete = () => {
     setTaskToDeleteId(null);
   };
-  
+  /**
+ * Toggles the archive status of a task.
+ * @param {string} taskId - The ID of the task to toggle.
+ */
   const handleToggleArchiveTask = (taskId: string) => {
     setTasks(
       tasks.map((task) =>
@@ -623,7 +758,11 @@ const App: React.FC = () => {
       )
     );
   };
-
+/**
+ * Updates the title of a task.
+ * @param {string} taskId - The ID of the task to update.
+ * @param {string} newTitle - The new title for the task.
+ */
   const handleUpdateTaskTitle = (taskId: string, newTitle: string) => {
     setTasks(
       tasks.map((task) =>
@@ -631,7 +770,11 @@ const App: React.FC = () => {
       )
     );
   };
-
+/**
+ * Updates the details of a task.
+ * @param {string} taskId - The ID of the task to update.
+ * @param {Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category' | 'color'>>} details - The details to update.
+ */
   const handleUpdateTaskDetails = (taskId: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category' | 'color'>>) => {
     const finalDetails = { ...details };
     if (typeof finalDetails.category === 'string') {
@@ -646,7 +789,11 @@ const App: React.FC = () => {
         task.id === taskId ? { ...task, ...finalDetails } : task
     ));
   };
-  
+  /**
+ * Adds a new content block to a task.
+ * @param {string} taskId - The ID of the task.
+ * @param {'subitem' | 'text'} type - The type of block to add.
+ */
   const handleAddBlock = (taskId: string, type: 'subitem' | 'text') => {
     setTasks(tasks.map(task => {
         if (task.id === taskId) {
@@ -661,7 +808,11 @@ const App: React.FC = () => {
         return task;
     }));
   };
-
+/**
+ * Adds an attachment to a task.
+ * @param {string} taskId - The ID of the task.
+ * @param {File} file - The file to attach.
+ */
   const handleAddAttachment = (taskId: string, file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -689,7 +840,12 @@ const App: React.FC = () => {
     };
     reader.readAsDataURL(file);
   };
-
+/**
+ * Updates a content block within a task.
+ * @param {string} taskId - The ID of the task.
+ * @param {string} blockId - The ID of the block to update.
+ * @param {Partial<ContentBlock>} updates - The updates to apply to the block.
+ */
   const handleUpdateBlock = (taskId: string, blockId: string, updates: Partial<ContentBlock>) => {
     setTasks(tasks.map(task => {
       if (task.id === taskId) {
@@ -709,7 +865,11 @@ const App: React.FC = () => {
       return task;
     }));
   };
-
+/**
+ * Deletes a content block from a task.
+ * @param {string} taskId - The ID of the task.
+ * @param {string} blockId - The ID of the block to delete.
+ */
   const handleDeleteBlock = (taskId: string, blockId: string) => {
     setTasks(tasks.map(task => {
       if (task.id === taskId) {
@@ -723,7 +883,11 @@ const App: React.FC = () => {
       return task;
     }));
   };
-
+/**
+ * Toggles the completion status of a subitem.
+ * @param {string} taskId - The ID of the task.
+ * @param {string} subItemId - The ID of the subitem to toggle.
+ */
   const handleToggleSubItem = (taskId: string, subItemId: string) => {
     setTasks(tasks.map(task => {
       if (task.id === taskId) {
@@ -765,7 +929,11 @@ const App: React.FC = () => {
       return task;
     }));
   };
-  
+  /**
+ * Adds a nested subitem to a parent subitem.
+ * @param {string} taskId - The ID of the task.
+ * @param {string} parentId - The ID of the parent subitem.
+ */
   const handleAddNestedSubItem = (taskId: string, parentId: string) => {
       setTasks(tasks.map(task => {
           if (task.id === taskId) {
@@ -782,7 +950,13 @@ const App: React.FC = () => {
           return task;
       }));
   };
-
+/**
+ * Moves a content block within a task.
+ * @param {string} taskId - The ID of the task.
+ * @param {string} sourceId - The ID of the block to move.
+ * @param {string | null} targetId - The ID of the target block.
+ * @param {'before' | 'after' | 'end'} position - The position to move the block to.
+ */
   const handleMoveBlock = (taskId: string, sourceId: string, targetId: string | null, position: 'before' | 'after' | 'end') => {
     setTasks(currentTasks => {
         const taskIndex = currentTasks.findIndex(t => t.id === taskId);
@@ -853,7 +1027,9 @@ const App: React.FC = () => {
         return newTasks;
     });
   };
-
+/**
+ * Exports the current tasks as a JSON file.
+ */
   const handleExportData = () => {
     try {
       const dataStr = JSON.stringify(tasks, null, 2);
@@ -873,7 +1049,10 @@ const App: React.FC = () => {
       alert("Ocorreu um erro ao exportar os dados.");
     }
   };
-
+/**
+ * Imports tasks from a JSON file.
+ * @param {React.ChangeEvent<HTMLInputElement>} event - The file input change event.
+ */
   const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -906,11 +1085,15 @@ const App: React.FC = () => {
     };
     reader.readAsText(file);
   };
-
+/**
+ * Shows the confirmation dialog for resetting data.
+ */
   const handleResetData = () => {
       setShowResetConfirmation(true);
   };
-  
+  /**
+ * Confirms and resets all application data.
+ */
   const handleConfirmReset = () => {
     setTasks(initialTasks);
     const initialCategories = Array.from(new Set(initialTasks.map(t => t.category).filter(Boolean)));
@@ -923,14 +1106,18 @@ const App: React.FC = () => {
     // Note: This doesn't clear cloud data for logged-in users, only local state.
     // For a full reset, we'd need a cloudStorage.delete() method.
   };
-
+/**
+ * Requests permission for notifications.
+ */
   const handleRequestNotificationPermission = async () => {
     if ('Notification' in window) {
       const permission = await Notification.requestPermission();
       setNotificationPermission(permission);
     }
   };
-
+/**
+ * Adds a new category.
+ */
   const handleAddCategory = () => {
     const trimmedName = newCategoryName.trim();
     if (trimmedName && !categories.includes(trimmedName)) {
@@ -939,11 +1126,16 @@ const App: React.FC = () => {
     setNewCategoryName('');
     setIsAddingCategory(false);
   };
-  
+  /**
+ * Sets the category to be deleted.
+ * @param {string} categoryName - The name of the category to delete.
+ */
   const handleDeleteCategory = (categoryName: string) => {
     setCategoryToDelete(categoryName);
   };
-
+/**
+ * Confirms and deletes the selected category.
+ */
   const handleConfirmDeleteCategory = () => {
     if (!categoryToDelete) return;
 
@@ -963,7 +1155,9 @@ const App: React.FC = () => {
     
     setCategoryToDelete(null);
   };
-
+/**
+ * Cancels the category deletion process.
+ */
   const handleCancelDeleteCategory = () => {
     setCategoryToDelete(null);
   };
