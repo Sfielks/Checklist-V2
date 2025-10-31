@@ -5,7 +5,7 @@ import { TaskType, ContentBlock, SubItemBlock, Priority } from '../types';
 import SubItem from './SubItem';
 import TextBlock from './TextBlock';
 import AttachmentBlock from './AttachmentBlock';
-import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon, DotsVerticalIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, ClipboardListIcon, FlagIcon, TagIcon, DocumentTextIcon, ChevronDownIcon } from './Icons';
+import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon, DotsVerticalIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, ClipboardListIcon, FlagIcon, TagIcon, DocumentTextIcon, ChevronDownIcon, SparklesIcon, SpinnerIcon, ClockIcon } from './Icons';
 import ColorPalette from './ColorPalette';
 
 interface TaskCardProps {
@@ -24,6 +24,7 @@ interface TaskCardProps {
   onToggleArchive: (id: string) => void;
   onMoveBlock: (taskId: string, sourceId: string, targetId: string | null, position: 'before' | 'after' | 'end') => void;
   onMoveTask: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
+  onSuggestSubItems: (taskId: string) => void;
   draggedTaskId: string | null;
   onSetDraggedTaskId: (id: string | null) => void;
   isNew?: boolean;
@@ -82,6 +83,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onToggleArchive,
   onMoveBlock,
   onMoveTask,
+  onSuggestSubItems,
   draggedTaskId,
   onSetDraggedTaskId,
   isNew = false,
@@ -266,6 +268,27 @@ const TaskCard: React.FC<TaskCardProps> = ({
     })}`;
   };
 
+  const dateValue = task.dueDate ? task.dueDate.split('T')[0] : '';
+  const timeValue = task.dueDate?.includes('T') ? task.dueDate.split('T')[1].substring(0, 5) : '';
+
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newDate = e.target.value;
+      if (!newDate) {
+          onUpdateDetails(task.id, { dueDate: undefined });
+      } else {
+          const newDueDate = timeValue ? `${newDate}T${timeValue}` : newDate;
+          onUpdateDetails(task.id, { dueDate: newDueDate });
+      }
+  };
+
+  const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newTime = e.target.value;
+      if (dateValue && newTime) {
+          const newDueDate = `${dateValue}T${newTime}`;
+          onUpdateDetails(task.id, { dueDate: newDueDate });
+      }
+  };
+
   return (
     <div 
       className={`relative bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col border border-gray-200 dark:border-gray-700/50 hover:border-teal-500/30 transition-all duration-300 ease-in-out border-t-8 ${isBeingDragged ? 'scale-105 shadow-2xl z-20 !opacity-100' : (draggedTaskId ? 'hover:!opacity-100' : '')} ${isNew ? 'animate-fade-in-scale' : ''}`}
@@ -405,16 +428,29 @@ const TaskCard: React.FC<TaskCardProps> = ({
                             </select>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                            <label htmlFor={`dueDate-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><CalendarIcon /> Vencimento:</label>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <label htmlFor={`dueDate-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><CalendarIcon /> Prazo:</label>
                             <input
                                 id={`dueDate-${task.id}`}
                                 type="date"
-                                value={task.dueDate || ''}
-                                onChange={(e) => onUpdateDetails(task.id, { dueDate: e.target.value })}
+                                value={dateValue}
+                                onChange={handleDateChange}
                                 className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-700 dark:text-gray-300"
                                 style={{ colorScheme: 'dark' }}
                             />
+                            {dateValue && (
+                                <div className="flex items-center gap-2">
+                                    <ClockIcon className="text-gray-500 dark:text-gray-400" />
+                                    <input
+                                        id={`dueTime-${task.id}`}
+                                        type="time"
+                                        value={timeValue}
+                                        onChange={handleTimeChange}
+                                        className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-700 dark:text-gray-300"
+                                        style={{ colorScheme: 'dark' }}
+                                    />
+                                </div>
+                            )}
                         </div>
                         
                         <div ref={categoryContainerRef} className="relative flex items-center gap-2">
@@ -505,27 +541,39 @@ const TaskCard: React.FC<TaskCardProps> = ({
               )}
             </div>
             
-            <div className={`mt-auto pt-4 flex items-center justify-stretch gap-2 text-sm ${isCompact ? 'hidden' : ''}`}>
+            <div className={`mt-auto pt-4 grid grid-cols-2 gap-2 text-sm ${isCompact ? 'hidden' : ''}`}>
               <button
                 onClick={() => onAddBlock(task.id, 'subitem')}
-                className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
+                className="flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
               >
                 <PlusIcon />
                 <span>Subitem</span>
               </button>
                <button
                 onClick={() => onAddBlock(task.id, 'text')}
-                className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
+                className="flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
               >
                 <DocumentTextIcon className="h-5 w-5"/>
                 <span>Texto</span>
               </button>
               <button
                 onClick={handleAddAttachmentClick}
-                className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
+                className="flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
               >
                 <PaperClipIcon />
                 <span>Anexar</span>
+              </button>
+              <button
+                onClick={() => onSuggestSubItems(task.id)}
+                disabled={task.isSuggesting}
+                className="flex items-center justify-center gap-2 text-white bg-gradient-to-r from-teal-500 to-blue-600 rounded-md py-2 transition-all transform enabled:hover:scale-105 shadow-md enabled:hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {task.isSuggesting ? (
+                    <SpinnerIcon />
+                ) : (
+                    <SparklesIcon />
+                )}
+                <span>{task.isSuggesting ? 'Sugerindo...' : 'Sugerir'}</span>
               </button>
             </div>
         </div>

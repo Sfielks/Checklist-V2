@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { marked } from 'marked';
 import { TextBlock as TextBlockType } from '../types';
@@ -13,7 +14,7 @@ interface TextBlockProps {
 }
 
 const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMoveBlock }) => {
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(block.text === '');
   const [text, setText] = useState(block.text);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | null>(null);
@@ -48,6 +49,22 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
     const end = textarea.selectionEnd;
     const selectedText = text.substring(start, end);
     const newText = `${text.substring(0, start)}**${selectedText}**${text.substring(end)}`;
+    
+    setText(newText);
+    setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(end + 2, end + 2);
+    }, 0);
+  };
+
+  const handleStrikethroughClick = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = text.substring(start, end);
+    const newText = `${text.substring(0, start)}~~${selectedText}~~${text.substring(end)}`;
     
     setText(newText);
     setTimeout(() => {
@@ -121,6 +138,10 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
         e.preventDefault();
         handleListClick();
     }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'x') {
+        e.preventDefault();
+        handleStrikethroughClick();
+    }
   };
   
   useEffect(() => {
@@ -179,7 +200,7 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
               className="w-full bg-gray-100/50 dark:bg-gray-700/50 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none overflow-hidden text-gray-900 dark:text-gray-200 -m-2"
               rows={1}
             />
-            <EditingToolbar onBold={handleBoldClick} onList={handleListClick} />
+            <EditingToolbar onBold={handleBoldClick} onStrikethrough={handleStrikethroughClick} onList={handleListClick} />
           </>
         ) : (
           <div 

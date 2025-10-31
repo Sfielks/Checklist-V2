@@ -36,6 +36,7 @@ export interface TaskType {
   archived: boolean;
   color?: string;
   createdAt: string;
+  isSuggesting?: boolean;
 }
 
 export interface SavedAnalysis {

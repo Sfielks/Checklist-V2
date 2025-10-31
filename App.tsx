@@ -1,6 +1,7 @@
 
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { GoogleGenAI, Type } from '@google/genai';
 import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock, SavedAnalysis, SyncStatus } from './types';
 import TaskCard from './components/TaskCard';
 import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon, SparklesIcon, BookmarkIcon, MicrophoneIcon, SearchIcon, ViewGridIcon, ViewListIcon, ExclamationTriangleIcon, InboxIcon, ChevronDownIcon } from './components/Icons';
@@ -187,6 +188,20 @@ const findBlockInTree = (content: ContentBlock[], blockId: string): ContentBlock
   }
   return null;
 };
+
+const getAllSubItems = (content: ContentBlock[]): SubItemBlock[] => {
+    let all: SubItemBlock[] = [];
+    for (const block of content) {
+        if (block.type === 'subitem') {
+            all.push(block);
+            if (block.children && block.children.length > 0) {
+                all = all.concat(getAllSubItems(block.children));
+            }
+        }
+    }
+    return all;
+};
+
 
 const migrateContent = (items: any[]): ContentBlock[] => {
     return items.map(item => {
@@ -451,7 +466,7 @@ const App: React.FC = () => {
       }
 
       tasks.forEach(task => {
-        if (task.dueDate === todayStr && !task.archived && !notifiedTaskIds.includes(task.id)) {
+        if (task.dueDate?.startsWith(todayStr) && !task.archived && !notifiedTaskIds.includes(task.id)) {
           new Notification('Tarefa vence hoje!', {
             body: `Não se esqueça de concluir: "${task.title}"`,
             icon: '/vite.svg',
@@ -866,6 +881,86 @@ const App: React.FC = () => {
     });
   };
 
+  const handleSuggestSubItems = async (taskId: string) => {
+    if (!process.env.API_KEY) {
+        alert("A chave da API do Gemini não foi configurada.");
+        return;
+    }
+
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    setTasks(currentTasks => currentTasks.map(t => t.id === taskId ? { ...t, isSuggesting: true } : t));
+
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+        const taskContent = task.content.map(block => {
+            if (block.type === 'subitem') return `- (Subitem) ${block.text}`;
+            if (block.type === 'text') return `- (Texto) ${block.text}`;
+            return '';
+        }).join('\n');
+
+        const prompt = `
+            Com base na seguinte tarefa, sugira 3 a 5 próximos passos ou subtarefas acionáveis para ajudar a completá-la.
+            Responda apenas com um objeto JSON contendo uma chave "suggestions" com uma array de strings.
+            As sugestões devem ser curtas, claras e começar com um verbo de ação.
+            Não inclua subtarefas que já existem.
+
+            Título da Tarefa: "${task.title}"
+            Conteúdo Atual:
+            ${taskContent || "Nenhum conteúdo ainda."}
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        suggestions: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.STRING
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        const jsonStr = response.text.trim();
+        const result = JSON.parse(jsonStr) as { suggestions: string[] };
+
+        if (result.suggestions && result.suggestions.length > 0) {
+            const newSubItems: SubItemBlock[] = result.suggestions.map(suggestionText => ({
+                id: Date.now().toString() + Math.random(),
+                type: 'subitem',
+                text: suggestionText,
+                completed: false,
+                children: [],
+            }));
+
+            setTasks(currentTasks => currentTasks.map(t => {
+                if (t.id === taskId) {
+                    return { ...t, content: [...t.content, ...newSubItems] };
+                }
+                return t;
+            }));
+        } else {
+            alert("A IA não conseguiu gerar sugestões para esta tarefa.");
+        }
+
+    } catch (error) {
+        console.error("Error suggesting sub-items:", error);
+        alert("Ocorreu um erro ao gerar sugestões. Tente novamente.");
+    } finally {
+        setTasks(currentTasks => currentTasks.map(t => t.id === taskId ? { ...t, isSuggesting: false } : t));
+    }
+  };
+
   const handleExportData = () => {
     try {
       const dataToExport: BackupData = {
@@ -1117,7 +1212,7 @@ const App: React.FC = () => {
         ? !task.archived
         : mainView === 'archived'
         ? task.archived
-        : !task.archived && task.dueDate === todayStr; // 'today'
+        : !task.archived && task.dueDate?.startsWith(todayStr); // 'today'
 
     const isPriorityMatch = priorityFilter === 'all' || task.priority === priorityFilter;
     const isCategoryMatch = categoryFilter === 'all' || task.category === categoryFilter;
@@ -1125,13 +1220,13 @@ const App: React.FC = () => {
     const isStatusMatch = () => {
       if (statusFilter === 'all') return true;
       
-      const subItems = task.content.filter(c => c.type === 'subitem') as SubItemBlock[];
-      if (subItems.length === 0) {
+      const allSubItems = getAllSubItems(task.content);
+      if (allSubItems.length === 0) {
         // Tasks without subitems are considered 'in-progress'
         return statusFilter === 'in-progress';
       }
       
-      const allCompleted = subItems.every(item => item.completed);
+      const allCompleted = allSubItems.every(item => item.completed);
       
       if (statusFilter === 'completed') return allCompleted;
       if (statusFilter === 'in-progress') return !allCompleted;
@@ -1199,26 +1294,25 @@ const App: React.FC = () => {
   
   const FilterModal = () => (
     <div 
-        className="fixed inset-0 bg-black bg-opacity-70 z-40 flex justify-center items-end sm:items-center"
+        className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center p-4"
         onClick={() => setIsFilterModalOpen(false)}
     >
         <div 
-            className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-700 p-6 animate-slide-up"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-sm border border-gray-200 dark:border-gray-700 animate-fade-in-scale"
             onClick={e => e.stopPropagation()}
         >
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-teal-600 dark:text-teal-400 flex items-center gap-2">
+            <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-xl font-bold text-teal-600 dark:text-teal-400 flex items-center gap-2">
                     <FilterIcon />
-                    <span>Filtrar Tarefas</span>
-                </h3>
+                    Filtros
+                </h2>
                 <button onClick={() => setIsFilterModalOpen(false)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Fechar filtros">
                     <XIcon />
                 </button>
             </div>
-            
-            <div className="space-y-6">
-                <div>
-                    <label htmlFor="priority-filter-modal" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Prioridade</label>
+            <div className="p-6 space-y-6">
+                 <div>
+                    <label htmlFor="priority-filter-modal" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Prioridade</label>
                     <select
                         id="priority-filter-modal"
                         value={priorityFilter}
@@ -1230,13 +1324,24 @@ const App: React.FC = () => {
                         ))}
                     </select>
                 </div>
-
-                <div>
-                    <label htmlFor="status-filter-modal" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status</label>
+                 <div>
+                    <label htmlFor="category-filter-modal" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
+                    <select
+                        id="category-filter-modal"
+                        value={categoryFilter}
+                        onChange={(e) => setCategoryFilter(e.target.value)}
+                        className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
+                    >
+                        <option value="all">Todas as Categorias</option>
+                        {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                </div>
+                 <div>
+                    <label htmlFor="status-filter-modal" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
                     <select
                         id="status-filter-modal"
                         value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value as any)}
+                        onChange={(e) => setStatusFilter(e.target.value as 'all' | 'completed' | 'in-progress')}
                         className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
                     >
                         {Object.entries(statusOptions).map(([key, label]) => (
@@ -1245,43 +1350,232 @@ const App: React.FC = () => {
                     </select>
                 </div>
             </div>
+             <div className="bg-gray-50 dark:bg-gray-700/50 px-6 py-4 flex justify-end items-center gap-4 rounded-b-lg">
+                <button
+                    onClick={() => {
+                        setPriorityFilter('all');
+                        setCategoryFilter('all');
+                        setStatusFilter('all');
+                    }}
+                    className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400"
+                >
+                    Limpar Filtros
+                </button>
+                 <button
+                    onClick={() => setIsFilterModalOpen(false)}
+                    className="px-4 py-2 bg-teal-600 text-white font-semibold rounded-md hover:bg-teal-700 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500"
+                >
+                    Aplicar
+                </button>
+             </div>
         </div>
     </div>
   );
 
-  const sidebarProps = {
-    setIsSettingsOpen,
-    setIsPanoramaOpen,
-    setIsSavedAnalysesOpen,
-    mainView,
-    setMainView,
-    archivedTaskCount,
-    categoryFilter,
-    setCategoryFilter,
-    priorityFilter,
-    setPriorityFilter,
-    tasks,
-    categories,
-    handleDeleteCategory,
-    isAddingCategory,
-    setIsAddingCategory,
-    newCategoryName,
-    setNewCategoryName,
-    handleAddCategory,
-    syncStatus,
-    handleLogout,
-  };
-
+  const Drawer = () => (
+    <div
+      className={`fixed inset-0 z-40 lg:hidden transition-all duration-300 ${isDrawerOpen ? 'bg-black/50' : 'bg-transparent pointer-events-none'}`}
+      onClick={() => setIsDrawerOpen(false)}
+    >
+        <div
+            className={`fixed top-0 left-0 bottom-0 w-80 bg-gray-100 dark:bg-gray-800 p-6 shadow-2xl transition-transform duration-300 ease-in-out ${isDrawerOpen ? 'translate-x-0' : '-translate-x-full'}`}
+            onClick={(e) => e.stopPropagation()}
+        >
+          <Sidebar
+            tasks={tasks}
+            categories={categories}
+            mainView={mainView}
+            setMainView={setMainView}
+            categoryFilter={categoryFilter}
+            setCategoryFilter={setCategoryFilter}
+            priorityFilter={priorityFilter}
+            setPriorityFilter={setPriorityFilter}
+            archivedTaskCount={archivedTaskCount}
+            syncStatus={syncStatus}
+            handleLogout={handleLogout}
+            isAddingCategory={isAddingCategory}
+            setIsAddingCategory={setIsAddingCategory}
+            newCategoryName={newCategoryName}
+            setNewCategoryName={setNewCategoryName}
+            handleAddCategory={handleAddCategory}
+            handleDeleteCategory={handleDeleteCategory}
+            setIsSettingsOpen={setIsSettingsOpen}
+            setIsPanoramaOpen={setIsPanoramaOpen}
+            setIsSavedAnalysesOpen={setIsSavedAnalysesOpen}
+            onClose={() => setIsDrawerOpen(false)}
+          />
+        </div>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 transition-colors duration-300">
+    <div className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-200 min-h-screen font-sans transition-colors duration-300">
       
+      <div className="flex">
+        {/* Sidebar */}
+        <aside className="hidden lg:block w-80 min-w-[320px] p-6 h-screen sticky top-0">
+          <Sidebar
+            tasks={tasks}
+            categories={categories}
+            mainView={mainView}
+            setMainView={setMainView}
+            categoryFilter={categoryFilter}
+            setCategoryFilter={setCategoryFilter}
+            priorityFilter={priorityFilter}
+            setPriorityFilter={setPriorityFilter}
+            archivedTaskCount={archivedTaskCount}
+            syncStatus={syncStatus}
+            handleLogout={handleLogout}
+            isAddingCategory={isAddingCategory}
+            setIsAddingCategory={setIsAddingCategory}
+            newCategoryName={newCategoryName}
+            setNewCategoryName={setNewCategoryName}
+            handleAddCategory={handleAddCategory}
+            handleDeleteCategory={handleDeleteCategory}
+            setIsSettingsOpen={setIsSettingsOpen}
+            setIsPanoramaOpen={setIsPanoramaOpen}
+            setIsSavedAnalysesOpen={setIsSavedAnalysesOpen}
+          />
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-h-screen">
+          <header className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+              <div className="flex items-center gap-4">
+                  <button onClick={() => setIsDrawerOpen(true)} className="lg:hidden p-2 -ml-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                      <MenuIcon />
+                  </button>
+                  <div className="flex items-center gap-3 text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">
+                    {pageIcon}
+                    <h1>{pageTitle}</h1>
+                  </div>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="relative flex-grow sm:flex-grow-0" ref={searchScopeDropdownRef}>
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <SearchIcon className="text-gray-400" />
+                    </div>
+                     <input
+                        type="text"
+                        placeholder="Pesquisar tarefas..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-16 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-1 flex items-center">
+                        <button
+                          onClick={() => setIsSearchScopeDropdownOpen(prev => !prev)}
+                          className="px-2 py-1 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center gap-1"
+                        >
+                          {searchScopeOptions[searchScope]}
+                          <ChevronDownIcon className="h-4 w-4"/>
+                        </button>
+                    </div>
+                    {isSearchScopeDropdownOpen && (
+                        <div className="absolute top-full right-0 mt-1 w-32 bg-white dark:bg-gray-700 rounded-md shadow-lg border dark:border-gray-600 z-10">
+                            {Object.entries(searchScopeOptions).map(([key, label]) => (
+                                <button
+                                    key={key}
+                                    onClick={() => {
+                                        setSearchScope(key as SearchScope);
+                                        setIsSearchScopeDropdownOpen(false);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600"
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                 <button 
+                    onClick={() => setIsFilterModalOpen(true)}
+                    className="p-2.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" 
+                    title="Filtros avançados"
+                 >
+                    <FilterIcon />
+                 </button>
+                 <div className="p-1 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 flex items-center">
+                    <button
+                        onClick={() => setLayoutMode('grid')}
+                        className={`p-1.5 rounded-md ${layoutMode === 'grid' ? 'text-teal-600 bg-gray-100 dark:bg-gray-700' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                        title="Visualização em Grade"
+                    >
+                        <ViewGridIcon className="h-5 w-5"/>
+                    </button>
+                    <button
+                        onClick={() => setLayoutMode('list')}
+                        className={`p-1.5 rounded-md ${layoutMode === 'list' ? 'text-teal-600 bg-gray-100 dark:bg-gray-700' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                        title="Visualização em Lista"
+                    >
+                        <ViewListIcon className="h-5 w-5"/>
+                    </button>
+                 </div>
+              </div>
+          </header>
+
+          {filteredTasks.length > 0 ? (
+            <div className={`${layoutMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6' : 'space-y-6 max-w-4xl mx-auto'}`}>
+              {filteredTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  categories={categories}
+                  onUpdateTitle={handleUpdateTaskTitle}
+                  onDeleteTask={handleDeleteTask}
+                  onAddBlock={handleAddBlock}
+                  onAddAttachment={handleAddAttachment}
+                  onUpdateBlock={handleUpdateBlock}
+                  onDeleteBlock={handleDeleteBlock}
+                  onToggleSubItem={handleToggleSubItem}
+                  onToggleAllSubItems={handleToggleAllSubItems}
+                  onAddNestedSubItem={handleAddNestedSubItem}
+                  onUpdateDetails={handleUpdateTaskDetails}
+                  onToggleArchive={handleToggleArchiveTask}
+                  onMoveBlock={handleMoveBlock}
+                  onMoveTask={handleMoveTask}
+                  onSuggestSubItems={handleSuggestSubItems}
+                  draggedTaskId={draggedTaskId}
+                  onSetDraggedTaskId={setDraggedTaskId}
+                  isNew={task.id === newlyCreatedTaskId}
+                  recentlyDeleted={recentlyDeleted}
+                  onUndoDeleteBlock={handleUndoDeleteBlock}
+                />
+              ))}
+            </div>
+          ) : (
+             <div className="flex flex-col items-center justify-center h-full text-center py-20 text-gray-500 dark:text-gray-400">
+                <ExclamationTriangleIcon className="h-12 w-12 mx-auto" />
+                <h2 className="text-xl font-semibold mt-4">Nenhuma Tarefa Encontrada</h2>
+                <p className="mt-2">Tente ajustar seus filtros ou criar uma nova tarefa.</p>
+             </div>
+          )}
+
+          <div className="fixed bottom-8 right-8 z-30 flex flex-col items-center gap-3">
+             <button
+                onClick={() => setIsLiveConversationOpen(true)}
+                className="p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-full shadow-lg hover:scale-110 transition-transform transform"
+                title="Criar tarefa com IA (Voz)"
+              >
+                <MicrophoneIcon />
+              </button>
+              <button
+                onClick={handleAddTask}
+                className="p-5 bg-gradient-to-br from-teal-500 to-green-600 text-white rounded-full shadow-lg hover:scale-110 transition-transform transform"
+                title="Adicionar Nova Tarefa"
+              >
+                <PlusIcon />
+              </button>
+          </div>
+        </main>
+      </div>
+
       <ConfirmationDialog
         isOpen={!!taskToDeleteId}
         onClose={handleCancelDelete}
         onConfirm={handleConfirmDelete}
-        title="Excluir Tarefa"
-        message="Tem certeza de que deseja excluir esta tarefa permanentemente? Esta ação não pode ser desfeita."
+        title="Confirmar Exclusão da Tarefa"
+        message={`Você tem certeza de que deseja excluir a tarefa "${tasks.find(t => t.id === taskToDeleteId)?.title}"? Esta ação não pode ser desfeita.`}
         icon={<TrashIcon className="h-6 w-6 text-red-500" />}
       />
 
@@ -1289,27 +1583,27 @@ const App: React.FC = () => {
         isOpen={!!categoryToDelete}
         onClose={handleCancelDeleteCategory}
         onConfirm={handleConfirmDeleteCategory}
-        title="Excluir Categoria"
-        message={`Tem certeza de que deseja excluir a categoria "${categoryToDelete}"? Esta ação removerá a categoria de todas as tarefas associadas, mas não excluirá as tarefas em si.`}
-        icon={<TrashIcon className="h-6 w-6 text-red-500" />}
+        title="Confirmar Exclusão da Categoria"
+        message={`Você tem certeza de que deseja excluir a categoria "${categoryToDelete}"? As tarefas nesta categoria não serão excluídas, mas ficarão sem categoria.`}
+        icon={<TagIcon className="h-6 w-6 text-red-500" />}
       />
-
-       <ConfirmationDialog
-        isOpen={!!analysisToDeleteId}
-        onClose={handleCancelDeleteAnalysis}
-        onConfirm={handleConfirmDeleteAnalysis}
-        title="Excluir Análise"
-        message="Tem certeza de que deseja excluir esta análise salva? Esta ação é irreversível."
-        icon={<TrashIcon className="h-6 w-6 text-red-500" />}
+      
+      <ConfirmationDialog
+        isOpen={showResetConfirmation}
+        onClose={() => setShowResetConfirmation(false)}
+        onConfirm={handleConfirmReset}
+        title="Confirmar Redefinição"
+        message="Você tem certeza de que deseja redefinir o aplicativo? Todos os seus dados locais (tarefas e análises) serão perdidos. Esta ação não pode ser desfeita."
+        icon={<ExclamationCircleIcon className="h-6 w-6 text-red-500" />}
       />
 
       <ConfirmationDialog
-          isOpen={showResetConfirmation}
-          onClose={() => setShowResetConfirmation(false)}
-          onConfirm={handleConfirmReset}
-          title="Redefinir Aplicativo"
-          message="Tem certeza de que deseja excluir TODOS os dados? Esta ação é irreversível."
-          icon={<ExclamationTriangleIcon className="h-6 w-6 text-yellow-500" />}
+        isOpen={!!analysisToDeleteId}
+        onClose={handleCancelDeleteAnalysis}
+        onConfirm={handleConfirmDeleteAnalysis}
+        title="Confirmar Exclusão da Análise"
+        message="Você tem certeza de que deseja excluir esta análise salva? Esta ação não pode ser desfeita."
+        icon={<TrashIcon className="h-6 w-6 text-red-500" />}
       />
 
       <SettingsModal
@@ -1324,13 +1618,6 @@ const App: React.FC = () => {
         onRequestNotificationPermission={handleRequestNotificationPermission}
       />
       
-      <ImportConfirmationModal
-        isOpen={!!importFileData}
-        onClose={handleCancelImport}
-        onConfirm={handleConfirmImport}
-        fileData={importFileData}
-      />
-
       <PanoramaModal
         isOpen={isPanoramaOpen}
         onClose={() => setIsPanoramaOpen(false)}
@@ -1351,230 +1638,16 @@ const App: React.FC = () => {
         onTasksCreated={handleAITasksCreation}
       />
 
+      <ImportConfirmationModal
+        isOpen={!!importFileData}
+        onClose={handleCancelImport}
+        onConfirm={handleConfirmImport}
+        fileData={importFileData}
+      />
+
       {isFilterModalOpen && <FilterModal />}
+      <Drawer />
 
-      {/* Mobile Drawer */}
-      {isDrawerOpen && (
-        <>
-          <div 
-            className="fixed inset-0 bg-black/60 z-30 lg:hidden" 
-            onClick={() => setIsDrawerOpen(false)}
-            aria-hidden="true"
-          ></div>
-          <aside className="fixed top-0 left-0 h-full w-72 bg-white dark:bg-gray-800 p-6 z-40 lg:hidden animate-slide-in-left overflow-y-auto">
-            <button 
-              onClick={() => setIsDrawerOpen(false)} 
-              className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
-              aria-label="Fechar menu"
-            >
-              <XIcon />
-            </button>
-            <Sidebar 
-              {...sidebarProps}
-              onClose={() => setIsDrawerOpen(false)}
-            />
-          </aside>
-        </>
-      )}
-      
-      <div className="lg:grid lg:grid-cols-[288px_1fr]">
-        {/* Desktop Sidebar */}
-        <aside className="hidden lg:block bg-white dark:bg-gray-800/50 border-r border-gray-200 dark:border-gray-700/50 p-6 h-screen sticky top-0 overflow-y-auto">
-           <Sidebar {...sidebarProps} />
-        </aside>
-
-        {/* Main Content */}
-        <main className="lg:p-8">
-          <header className="sticky top-0 z-20 bg-gray-100/95 dark:bg-gray-900/95 backdrop-blur-sm lg:static lg:bg-transparent dark:lg:bg-transparent flex justify-between items-center gap-4 p-4 sm:p-6 lg:p-0 mb-6">
-             <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
-                <button onClick={() => setIsDrawerOpen(true)} className="lg:hidden p-2 -ml-2 text-gray-600 dark:text-gray-300">
-                    <MenuIcon />
-                </button>
-                <div className="flex-1 min-w-0 flex items-center gap-3">
-                    <div className="text-gray-400 dark:text-gray-500 flex-shrink-0">
-                      {pageIcon}
-                    </div>
-                    <div className="min-w-0">
-                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200 truncate" title={pageTitle}>
-                            {pageTitle}
-                        </h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">
-                            {filteredTasks.length} tarefa{filteredTasks.length !== 1 ? 's' : ''}
-                        </p>
-                    </div>
-                </div>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-                <div className="hidden sm:flex items-center gap-1 p-1 bg-gray-200 dark:bg-gray-700 rounded-lg">
-                    <button
-                        onClick={() => setLayoutMode('grid')}
-                        className={`p-1.5 rounded-md transition-colors ${layoutMode === 'grid' ? 'bg-white dark:bg-gray-800 text-teal-600 shadow' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'}`}
-                        title="Visualização em Grade"
-                    >
-                        <ViewGridIcon className="h-5 w-5" />
-                    </button>
-                    <button
-                        onClick={() => setLayoutMode('list')}
-                        className={`p-1.5 rounded-md transition-colors ${layoutMode === 'list' ? 'bg-white dark:bg-gray-800 text-teal-600 shadow' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'}`}
-                        title="Visualização em Lista"
-                    >
-                        <ViewListIcon className="h-5 w-5" />
-                    </button>
-                </div>
-                <button
-                    onClick={() => setIsFilterModalOpen(true)}
-                    className="flex items-center justify-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-sm"
-                >
-                    <FilterIcon />
-                    <span className="hidden sm:inline">Filtros</span>
-                </button>
-                {mainView !== 'archived' && (
-                    <>
-                        <button
-                            onClick={() => setIsLiveConversationOpen(true)}
-                            className="flex items-center justify-center gap-2 bg-gradient-to-r from-teal-500 to-blue-600 text-white font-semibold px-3 sm:px-4 py-2 rounded-lg hover:from-teal-600 hover:to-blue-700 transition-all transform hover:scale-105 shadow-lg"
-                        >
-                            <MicrophoneIcon />
-                            <span className="hidden sm:inline">Criar com IA</span>
-                        </button>
-                        <button
-                            onClick={handleAddTask}
-                            className="hidden lg:flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-teal-700 transition-transform transform hover:scale-105 shadow-lg"
-                        >
-                            <PlusIcon />
-                            <span>Nova Tarefa</span>
-                        </button>
-                    </>
-                )}
-            </div>
-          </header>
-
-          <div className="px-4 sm:px-6 lg:px-0 mb-6">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-grow">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                      <SearchIcon className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder={searchScope === 'all' ? 'Buscar tarefas...' : `Buscar por ${searchScopeOptions[searchScope].toLowerCase()}...`}
-                      className="block w-full rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800 py-2.5 pl-10 pr-10 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50 sm:text-sm"
-                  />
-                  {searchQuery && (
-                      <button
-                          onClick={() => setSearchQuery('')}
-                          className="absolute inset-y-0 right-0 flex items-center pr-3"
-                      >
-                          <XCircleIcon className="h-5 w-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" />
-                      </button>
-                  )}
-              </div>
-              <div className="relative">
-                <button
-                  onClick={() => setIsSearchScopeDropdownOpen(prev => !prev)}
-                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-sm text-sm"
-                  >
-                  <span>{searchScopeOptions[searchScope]}</span>
-                  <ChevronDownIcon className={`h-4 w-4 text-gray-500 transition-transform ${isSearchScopeDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {isSearchScopeDropdownOpen && (
-                  <div ref={searchScopeDropdownRef} className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 z-30 overflow-hidden animate-fade-in-scale">
-                    <ul className="p-1">
-                      {Object.entries(searchScopeOptions).map(([key, label]) => (
-                        <li key={key}>
-                          <button
-                            onClick={() => {
-                              setSearchScope(key as SearchScope);
-                              setIsSearchScopeDropdownOpen(false);
-                            }}
-                            className="w-full text-left flex items-center justify-between px-3 py-2 text-sm rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
-                          >
-                            <span>{label}</span>
-                            {searchScope === key && <CheckCircleIcon className="h-4 w-4 text-teal-500" />}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="px-4 sm:px-6 lg:px-0 pb-24 lg:pb-0">
-            <div className={layoutMode === 'grid'
-              ? `grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 ${draggedTaskId ? '[&>*]:opacity-50' : ''}`
-              : `mx-auto w-full max-w-4xl flex flex-col gap-4 ${draggedTaskId ? '[&>*]:opacity-50' : ''}`
-            }>
-              {filteredTasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  categories={categories}
-                  onUpdateTitle={handleUpdateTaskTitle}
-                  onDeleteTask={handleDeleteTask}
-                  onAddBlock={handleAddBlock}
-                  onAddAttachment={handleAddAttachment}
-                  onUpdateBlock={handleUpdateBlock}
-                  onDeleteBlock={handleDeleteBlock}
-                  onToggleSubItem={handleToggleSubItem}
-                  onToggleAllSubItems={handleToggleAllSubItems}
-                  onAddNestedSubItem={handleAddNestedSubItem}
-                  onUpdateDetails={handleUpdateTaskDetails}
-                  onToggleArchive={handleToggleArchiveTask}
-                  onMoveBlock={handleMoveBlock}
-                  onMoveTask={handleMoveTask}
-                  draggedTaskId={draggedTaskId}
-                  onSetDraggedTaskId={setDraggedTaskId}
-                  isNew={task.id === newlyCreatedTaskId}
-                  recentlyDeleted={recentlyDeleted}
-                  onUndoDeleteBlock={handleUndoDeleteBlock}
-                />
-              ))}
-            </div>
-
-            {filteredTasks.length === 0 && (
-              <div className="text-center py-20 flex flex-col items-center">
-                <div className="p-6 bg-gray-200 dark:bg-gray-800/50 rounded-full">
-                    <InboxIcon className="h-24 w-24 text-gray-400 dark:text-gray-500" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mt-6">
-                  {searchQuery ? 'Nenhum Resultado Encontrado' : 'Tudo limpo por aqui!'}
-                </h3>
-                <p className="text-gray-500 dark:text-gray-400 mt-2">
-                  {searchQuery
-                    ? 'Tente ajustar sua busca ou limpar os filtros.'
-                    : mainView === 'archived'
-                    ? 'Você não tem tarefas arquivadas.'
-                    : 'Crie uma nova tarefa para começar.'}
-                </p>
-                {mainView !== 'archived' && !searchQuery && (
-                  <button
-                      onClick={handleAddTask}
-                      className="mt-6 flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold px-5 py-2.5 rounded-lg hover:bg-teal-700 transition-transform transform hover:scale-105 shadow-lg mx-auto"
-                  >
-                      <PlusIcon />
-                      <span>Criar Primeira Tarefa</span>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
-
-      {/* FAB for Mobile */}
-      {mainView !== 'archived' && (
-        <button
-          onClick={handleAddTask}
-          className="lg:hidden fixed bottom-6 right-6 bg-teal-600 text-white p-4 rounded-full shadow-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 dark:focus:ring-offset-gray-900 transition-transform transform hover:scale-110"
-          aria-label="Adicionar nova tarefa"
-        >
-          <PlusIcon />
-        </button>
-      )}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { SubItemBlock } from '../types';
 import { TrashIcon, CheckCircleIcon, CircleIcon, PlusCircleIcon, GripVerticalIcon } from './Icons';
@@ -17,11 +18,12 @@ interface SubItemProps {
 const parseInlineMarkdown = (text: string): string => {
   return text
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/__(.*?)__/g, '<strong>$1</strong>');
+    .replace(/__(.*?)__/g, '<strong>$1</strong>')
+    .replace(/~~(.*?)~~/g, '<del>$1</del>');
 };
 
 const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete, onAddNestedSubItem, onMoveBlock, level = 0 }) => {
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(subItem.text === '');
   const [text, setText] = useState(subItem.text);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | null>(null);
@@ -70,6 +72,22 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
     }, 0);
   };
 
+  const handleStrikethroughClick = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = text.substring(start, end);
+    const newText = `${text.substring(0, start)}~~${selectedText}~~${text.substring(end)}`;
+    
+    setText(newText);
+    setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(end + 2, end + 2);
+    }, 0);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -78,6 +96,10 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
     if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
         e.preventDefault();
         handleBoldClick();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'x') {
+        e.preventDefault();
+        handleStrikethroughClick();
     }
   };
 
@@ -111,7 +133,7 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
        {dragOverPosition === 'top' && <div className="absolute top-0 left-0 right-0 h-2 bg-teal-500 rounded shadow-[0_0_12px_2px] shadow-teal-400/60 z-10"></div>}
        {dragOverPosition === 'bottom' && <div className="absolute bottom-0 left-0 right-0 h-2 bg-teal-500 rounded shadow-[0_0_12px_2px] shadow-teal-400/60 z-10"></div>}
       <div 
-        className="flex items-center space-x-3 group py-1.5"
+        className={`flex items-center space-x-3 group py-1.5 rounded-md transition-colors ${subItem.completed ? 'bg-gray-100 dark:bg-gray-800/30' : 'hover:bg-gray-100/50 dark:hover:bg-gray-700/20'}`}
         draggable
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
@@ -137,7 +159,7 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
               }`}
               rows={1}
             />
-            <EditingToolbar onBold={handleBoldClick} />
+            <EditingToolbar onBold={handleBoldClick} onStrikethrough={handleStrikethroughClick} />
           </div>
         ) : (
           <div

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { TaskType, Priority, SyncStatus } from '../types';
+import Logo from './Logo';
 import {
   ClipboardListIcon,
   SettingsIcon,
@@ -122,7 +123,10 @@ const Sidebar: React.FC<SidebarProps> = ({
     <div className="flex flex-col h-full">
       <div className="flex-grow">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-teal-600 dark:text-teal-400">Tarefas</h1>
+            <div className="flex items-center gap-3">
+                <Logo className="h-9 w-9" />
+                <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-200">Checklist</h1>
+            </div>
           {onClose ? null : (
             <button onClick={() => setIsSettingsOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Configurações">
               <SettingsIcon />
