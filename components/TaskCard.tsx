@@ -26,12 +26,12 @@ interface TaskCardProps {
   onMoveTask: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
 }
 
-const priorityConfig: Record<Priority, { label: string; ringColor: string }> = {
-    none: { label: 'Nenhuma', ringColor: 'focus:ring-gray-500' },
-    low: { label: 'Baixa', ringColor: 'focus:ring-blue-400' },
-    medium: { label: 'Média', ringColor: 'focus:ring-yellow-400' },
-    high: { label: 'Alta', ringColor: 'focus:ring-orange-400' },
-    urgent: { label: 'Urgente', ringColor: 'focus:ring-red-500' },
+const priorityConfig: Record<Priority, { label: string; ringColor: string; dotColor: string }> = {
+    none: { label: 'Nenhuma', ringColor: 'focus:ring-gray-500', dotColor: '' },
+    low: { label: 'Baixa', ringColor: 'focus:ring-blue-400', dotColor: 'bg-blue-500' },
+    medium: { label: 'Média', ringColor: 'focus:ring-yellow-400', dotColor: 'bg-yellow-500' },
+    high: { label: 'Alta', ringColor: 'focus:ring-orange-400', dotColor: 'bg-orange-500' },
+    urgent: { label: 'Urgente', ringColor: 'focus:ring-red-500', dotColor: 'bg-red-600' },
 };
 
 const countSubItems = (items: ContentBlock[]): { total: number; completed: number } => {
@@ -246,19 +246,35 @@ const TaskCard: React.FC<TaskCardProps> = ({
           )}
           <div className="flex-grow min-w-0">
             {isEditingTitle ? (
-                <input
-                    ref={titleInputRef}
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    onBlur={handleTitleBlur}
-                    onKeyDown={handleTitleKeyDown}
-                    className="text-xl font-bold text-teal-600 dark:text-teal-400 bg-transparent border-b-2 border-teal-500 focus:outline-none w-full"
-                />
+                <div className="flex items-center gap-2">
+                    {task.priority && task.priority !== 'none' && (
+                        <div 
+                            className={`w-3 h-3 rounded-full flex-shrink-0 ${priorityConfig[task.priority].dotColor}`}
+                            title={`Prioridade: ${priorityConfig[task.priority].label}`}
+                        ></div>
+                    )}
+                    <input
+                        ref={titleInputRef}
+                        type="text"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        onBlur={handleTitleBlur}
+                        onKeyDown={handleTitleKeyDown}
+                        className="text-xl font-bold text-teal-600 dark:text-teal-400 bg-transparent border-b-2 border-teal-500 focus:outline-none w-full"
+                    />
+                </div>
             ) : (
-                <h2 onClick={() => setIsEditingTitle(true)} className="text-xl font-bold text-teal-600 dark:text-teal-400 cursor-pointer w-full break-words">
-                    {task.title}
-                </h2>
+                <div onClick={() => setIsEditingTitle(true)} className="flex items-center gap-2 cursor-pointer w-full">
+                    {task.priority && task.priority !== 'none' && (
+                        <div 
+                            className={`w-3 h-3 rounded-full flex-shrink-0 ${priorityConfig[task.priority].dotColor}`}
+                            title={`Prioridade: ${priorityConfig[task.priority].label}`}
+                        ></div>
+                    )}
+                    <h2 className="text-xl font-bold text-teal-600 dark:text-teal-400 break-words">
+                        {task.title}
+                    </h2>
+                </div>
             )}
           </div>
         </div>
@@ -341,11 +357,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </div>
       </div>
       
-      {totalSubItems > 0 && (
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-          <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
-        </div>
-      )}
+      <div className={`w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 ${totalSubItems > 0 ? 'block' : 'hidden'}`}>
+        <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+      </div>
 
       <div 
         className="flex flex-col min-h-[2rem]"
