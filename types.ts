@@ -33,10 +33,12 @@ export interface TaskType {
   priority?: Priority;
   dueDate?: string;
   category?: string;
+  tags?: string[];
   archived: boolean;
   color?: string;
   createdAt: string;
   isSuggesting?: boolean;
+  deletedAt?: string;
 }
 
 export interface SavedAnalysis {

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock, SavedAnalysis, SyncStatus } from './types';
 import TaskCard from './components/TaskCard';
-import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon, SparklesIcon, BookmarkIcon, MicrophoneIcon, SearchIcon, ViewGridIcon, ViewListIcon, ExclamationTriangleIcon, InboxIcon, ChevronDownIcon } from './components/Icons';
+import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon, SparklesIcon, BookmarkIcon, MicrophoneIcon, SearchIcon, ViewGridIcon, ViewListIcon, ExclamationTriangleIcon, InboxIcon, ChevronDownIcon, UnarchiveIcon, RestoreIcon } from './components/Icons';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SettingsModal from './components/SettingsModal';
 import PanoramaModal from './components/PanoramaModal';
@@ -26,6 +26,7 @@ const initialTasks: TaskType[] = [
     priority: 'high',
     dueDate: '2024-08-15',
     category: 'Acadêmico',
+    tags: ['urgente', 'escrita'],
     archived: false,
     color: '#581c1c',
     createdAt: '2024-08-10T10:00:00.000Z',
@@ -42,6 +43,7 @@ const initialTasks: TaskType[] = [
     priority: 'medium',
     dueDate: '',
     category: 'Acadêmico',
+    tags: ['pesquisa', 'escrita'],
     archived: false,
     createdAt: '2024-08-11T11:00:00.000Z',
   },
@@ -53,6 +55,7 @@ const initialTasks: TaskType[] = [
     ],
     priority: 'low',
     category: 'Pesquisa',
+    tags: ['ideias'],
     archived: false,
     createdAt: '2024-08-12T12:00:00.000Z',
   },
@@ -68,7 +71,7 @@ type Theme = 'light' | 'dark';
 type View = 'home' | 'checklist';
 type User = { id: string; name: string };
 type LayoutMode = 'grid' | 'list';
-type MainView = 'active' | 'today' | 'archived';
+type MainView = 'active' | 'today' | 'archived' | 'trash';
 type SearchScope = 'all' | 'title' | 'content' | 'category';
 
 interface BackupData {
@@ -242,19 +245,19 @@ const HomeScreen = ({ onGuestLogin }: { onGuestLogin: () => void; }) => (
             <h1 className="text-5xl sm:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500 pb-2">
                 Checklist Inteligente
             </h1>
-            <p className="text-gray-600 dark:text-gray-300 mt-4 text-lg sm:text-xl">
-                Organize suas ideias, projetos e tarefas diárias com facilidade e estilo.
+            <p className="text-gray-600 dark:text-gray-300 text-lg sm:text-xl mt-4 max-w-xl">
+                Organize suas tarefas com subtarefas aninhadas, defina prioridades e receba sugestões inteligentes da IA para otimizar seu fluxo de trabalho.
             </p>
-            <div className="mt-12">
-                <button
+            <div className="mt-10 flex flex-col sm:flex-row items-center gap-4">
+                <button 
                     onClick={onGuestLogin}
-                    className="w-full sm:w-auto flex items-center justify-center gap-3 bg-teal-600 text-white font-bold py-4 px-10 rounded-lg hover:bg-teal-700 transition-all duration-300 transform hover:scale-105 text-xl shadow-lg hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-teal-500/50"
+                    className="w-full sm:w-auto bg-gradient-to-r from-teal-500 to-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-teal-300 dark:focus:ring-teal-800"
                 >
-                    <span>Começar Agora</span>
+                    Acessar como Visitante
                 </button>
             </div>
-            <p className="mt-8 text-sm text-gray-500 dark:text-gray-400">
-                Seus dados são salvos automaticamente no seu dispositivo.
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-6">
+                Como visitante, seus dados são salvos apenas no seu navegador.
             </p>
         </div>
     </div>
@@ -263,107 +266,60 @@ const HomeScreen = ({ onGuestLogin }: { onGuestLogin: () => void; }) => (
 const App: React.FC = () => {
   const [view, setView] = useState<View>('home');
   const [user, setUser] = useState<User | null>(null);
-  const [taskToDeleteId, setTaskToDeleteId] = useState<string | null>(null);
-  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
-  const [analysisToDeleteId, setAnalysisToDeleteId] = useState<string | null>(null);
-  const [isAddingCategory, setIsAddingCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
+  const [tasks, setTasks] = useState<TaskType[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('saved');
+
+  const [mainView, setMainView] = useState<MainView>('active');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isConfirmingReset, setIsConfirmingReset] = useState(false);
+  const [isConfirmingEmptyTrash, setIsConfirmingEmptyTrash] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPanoramaOpen, setIsPanoramaOpen] = useState(false);
   const [isSavedAnalysesOpen, setIsSavedAnalysesOpen] = useState(false);
   const [isLiveConversationOpen, setIsLiveConversationOpen] = useState(false);
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
-    'Notification' in window ? Notification.permission : 'denied'
-  );
-  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  const [newlyCreatedTaskId, setNewlyCreatedTaskId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchScope, setSearchScope] = useState<SearchScope>('all');
-  const [isSearchScopeDropdownOpen, setIsSearchScopeDropdownOpen] = useState(false);
-  const searchScopeDropdownRef = useRef<HTMLDivElement>(null);
-  const [recentlyDeleted, setRecentlyDeleted] = useState<{ block: ContentBlock; taskId: string; originalTaskContent: ContentBlock[] } | null>(null);
-  const undoTimeoutRef = useRef<number | null>(null);
+  const [isImportConfirmationOpen, setIsImportConfirmationOpen] = useState(false);
   const [importFileData, setImportFileData] = useState<BackupData | null>(null);
 
-
-  const [tasks, setTasks] = useState<TaskType[]>(() => {
-    try {
-      const savedTasks = window.localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (savedTasks) {
-        const parsedTasks = JSON.parse(savedTasks);
-        return parsedTasks.map((task: any) => ({ 
-            ...task, 
-            archived: task.archived || false,
-            content: migrateContent(task.content || []),
-            createdAt: task.createdAt || new Date().toISOString(),
-        }));
-      }
-      return initialTasks;
-    } catch (error)
-     {
-      console.error("Could not load tasks from localStorage", error);
-      return initialTasks;
-    }
-  });
-
-   const [savedAnalyses, setSavedAnalyses] = useState<SavedAnalysis[]>(() => {
-    try {
-      const saved = window.localStorage.getItem(ANALYSES_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : [];
-    } catch (error) {
-      console.error("Could not load analyses from localStorage", error);
-      return [];
-    }
-  });
+  const [theme, setTheme] = useState<Theme>('light');
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('grid');
   
-  const [categories, setCategories] = useState<string[]>(() => {
-    try {
-      const savedTasks = window.localStorage.getItem(LOCAL_STORAGE_KEY);
-      const tasksToParse: TaskType[] = savedTasks ? JSON.parse(savedTasks) : initialTasks;
-      const initialCategories = Array.from(new Set(tasksToParse.map((t: TaskType) => t.category).filter((c?: string): c is string => !!c)));
-      return initialCategories.sort();
-    } catch (error) {
-      console.error("Could not load categories from tasks", error);
-      const initialCategories = Array.from(new Set(initialTasks.map(t => t.category).filter((c?: string): c is string => !!c)));
-      return initialCategories.sort();
-    }
-  });
-
-  const getInitialTheme = (): Theme => {
-    try {
-        const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-        if (savedTheme === 'light' || savedTheme === 'dark') {
-            return savedTheme;
-        }
-    } catch (error) {
-        console.error("Could not load theme from localStorage", error);
-    }
-    if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-        return 'dark';
-    }
-    return 'light';
-  };
-
-  const [theme, setTheme] = useState<Theme>(getInitialTheme);
-  
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
-    try {
-        const savedLayout = window.localStorage.getItem(LAYOUT_STORAGE_KEY);
-        return (savedLayout === 'grid' || savedLayout === 'list') ? savedLayout : 'grid';
-    } catch (error) {
-        console.error("Could not load layout mode from localStorage", error);
-        return 'grid';
-    }
-  });
-
-  const [mainView, setMainView] = useState<MainView>('active');
-  const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchScope, setSearchScope] = useState<SearchScope>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'in-progress'>('all');
+  const [tagFilter, setTagFilter] = useState<string>('all');
+  
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  
+  const [recentlyDeletedBlock, setRecentlyDeletedBlock] = useState<{ block: ContentBlock; taskId: string; originalIndex: number } | null>(null);
+  const undoTimeoutRef = useRef<number | null>(null);
+  
+  const [savedAnalyses, setSavedAnalyses] = useState<SavedAnalysis[]>([]);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+
+  // --- Initialization & Data Persistence ---
+
+  useEffect(() => {
+    // Theme initialization
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+    setTheme(initialTheme);
+    
+    // Layout initialization
+    const savedLayout = localStorage.getItem(LAYOUT_STORAGE_KEY) as LayoutMode | null;
+    setLayoutMode(savedLayout || 'grid');
+
+    // Notification permission status
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+    }
+  }, []);
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -371,268 +327,217 @@ const App: React.FC = () => {
     } else {
       document.documentElement.classList.remove('dark');
     }
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
-  
+
   useEffect(() => {
-    try {
-        window.localStorage.setItem(LAYOUT_STORAGE_KEY, layoutMode);
-    } catch (error) {
-        console.error("Could not save layout mode to localStorage", error);
-    }
+    localStorage.setItem(LAYOUT_STORAGE_KEY, layoutMode);
   }, [layoutMode]);
 
-  // Effect for listening to system theme changes
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    
-    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
-      // Check if the user has manually set a theme. If so, don't override it.
-      const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-      if (savedTheme) {
-        return; 
-      }
-      setTheme(e.matches ? 'dark' : 'light');
-    };
 
-    try {
-      mediaQuery.addEventListener('change', handleSystemThemeChange);
-    } catch (e) {
-      mediaQuery.addListener(handleSystemThemeChange);
-    }
-
-    return () => {
-      try {
-        mediaQuery.removeEventListener('change', handleSystemThemeChange);
-      } catch (e) {
-        mediaQuery.removeListener(handleSystemThemeChange);
-      }
-    };
-  }, []);
-  
-  // Debounced save effect
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (user) {
-        setSyncStatus('syncing');
-        cloudStorage.saveTasks(user.id, tasks)
-          .then(() => setSyncStatus('saved'))
-          .catch(() => setSyncStatus('error'));
-      } else {
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
-          setSyncStatus('offline');
-        } catch (error) {
-          console.error("Could not save tasks to localStorage", error);
-          setSyncStatus('error');
-        }
-      }
-    }, 1000);
-
-    return () => clearTimeout(handler);
-  }, [tasks, user]);
-
-  useEffect(() => {
-    if (newlyCreatedTaskId) {
-      const timer = setTimeout(() => {
-        setNewlyCreatedTaskId(null);
-      }, 500); // Animation is 200ms, giving it extra time
-      return () => clearTimeout(timer);
-    }
-  }, [newlyCreatedTaskId]);
-
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(ANALYSES_STORAGE_KEY, JSON.stringify(savedAnalyses));
-    } catch (error) {
-      console.error("Could not save analyses to localStorage", error);
-    }
-  }, [savedAnalyses]);
-  
-  // Effect for checking due tasks and sending notifications
-  useEffect(() => {
-    if (notificationPermission !== 'granted' || view !== 'checklist') return;
-
-    const checkInterval = setInterval(() => {
-      const now = new Date();
-      const todayStr = now.toISOString().split('T')[0];
-      const notifiedTasksKey = `notified-tasks-${todayStr}`;
-      
-      let notifiedTaskIds: string[];
-      try {
-        notifiedTaskIds = JSON.parse(localStorage.getItem(notifiedTasksKey) || '[]');
-      } catch {
-        notifiedTaskIds = [];
-      }
-
-      tasks.forEach(task => {
-        if (task.dueDate?.startsWith(todayStr) && !task.archived && !notifiedTaskIds.includes(task.id)) {
-          new Notification('Tarefa vence hoje!', {
-            body: `Não se esqueça de concluir: "${task.title}"`,
-            icon: '/vite.svg',
-          });
-          notifiedTaskIds.push(task.id);
-        }
-      });
-      
-      try {
-        localStorage.setItem(notifiedTasksKey, JSON.stringify(notifiedTaskIds));
-      } catch (error) {
-        console.error("Could not save notified tasks to localStorage", error);
-      }
-    }, 60 * 1000); // Check every minute
-
-    return () => clearInterval(checkInterval);
-  }, [tasks, notificationPermission, view]);
-
-    // Effect for closing search scope dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchScopeDropdownRef.current && !searchScopeDropdownRef.current.contains(event.target as Node)) {
-        setIsSearchScopeDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const loadAndSyncTasks = async (userId: string) => {
-    setSyncStatus('syncing');
-    try {
-        const cloudTasks = await cloudStorage.loadTasks(userId);
-        if (cloudTasks) {
-            setTasks(cloudTasks.map((task: any) => ({ ...task, content: migrateContent(task.content || []) })));
-            const cloudCategories = Array.from(new Set(cloudTasks.map((t: TaskType) => t.category).filter((c?: string): c is string => !!c)));
-            setCategories(cloudCategories.sort());
-        } else {
-            // New user, migrate guest tasks to cloud
-            await cloudStorage.saveTasks(userId, tasks);
-        }
-        setSyncStatus('saved');
-    } catch (e) {
-        setSyncStatus('error');
-        alert("Não foi possível carregar os dados da nuvem. Verifique sua conexão e tente novamente.");
-    }
-  };
-
-  const handleGuestLogin = () => {
-    setUser(null);
-    setSyncStatus('offline');
+  const guestLogin = () => {
+    const guestUser = { id: 'guest', name: 'Visitante' };
+    setUser(guestUser);
     setView('checklist');
+    loadData(guestUser.id);
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    setSyncStatus('offline');
-    // Reload guest tasks
-    const savedTasks = window.localStorage.getItem(LOCAL_STORAGE_KEY);
-    setTasks(savedTasks ? JSON.parse(savedTasks) : initialTasks);
-    setView('home');
+  const loadData = async (userId: string) => {
+    setIsLoading(true);
+    let loadedTasks: TaskType[] | null = null;
+    let loadedAnalyses: SavedAnalysis[] = [];
+
+    if (userId === 'guest') {
+      const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
+      loadedTasks = localData ? JSON.parse(localData) : initialTasks;
+      const localAnalyses = localStorage.getItem(ANALYSES_STORAGE_KEY);
+      loadedAnalyses = localAnalyses ? JSON.parse(localAnalyses) : [];
+    } else {
+      // Cloud load logic
+      try {
+        setSyncStatus('syncing');
+        loadedTasks = await cloudStorage.loadTasks(userId);
+        // Add analysis loading from cloud if needed
+        setSyncStatus('saved');
+      } catch {
+        setSyncStatus('error');
+      }
+    }
+    
+    const migratedTasks = (loadedTasks || []).map(task => ({
+        ...task,
+        content: migrateContent(task.content)
+    }));
+
+    setTasks(migratedTasks);
+    setSavedAnalyses(loadedAnalyses);
+    setIsLoading(false);
   };
+
+  const saveData = useCallback(async (tasksToSave: TaskType[], analysesToSave: SavedAnalysis[]) => {
+    if (!user) return;
+    
+    if (user.id === 'guest') {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasksToSave));
+        localStorage.setItem(ANALYSES_STORAGE_KEY, JSON.stringify(analysesToSave));
+    } else {
+        try {
+            setSyncStatus('syncing');
+            await cloudStorage.saveTasks(user.id, tasksToSave);
+            // Add analysis saving to cloud if needed
+            await new Promise(resolve => setTimeout(resolve, 500)); // optimistic UI delay
+            setSyncStatus('saved');
+        } catch {
+            setSyncStatus('error');
+        }
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      saveData(tasks, savedAnalyses);
+    }
+  }, [tasks, savedAnalyses, isLoading, saveData]);
+  
+   // --- Notifications ---
+
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) return;
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+  };
+  
+  const scheduleNotifications = useCallback(() => {
+    // This is a simplified version. A real app would use a service worker for reliable notifications.
+    const todayStr = new Date().toISOString().split('T')[0];
+    tasks.forEach(task => {
+        // FIX: Property 'completed' does not exist on type 'TaskType'. Task completion is derived from its sub-items.
+        const subItems = getAllSubItems(task.content);
+        const isTaskCompleted = subItems.length > 0 && subItems.every(item => item.completed);
+        if (task.dueDate?.startsWith(todayStr) && !isTaskCompleted && !task.archived) {
+             if (notificationPermission === 'granted') {
+                 new Notification('Lembrete de Tarefa', {
+                     body: `Não se esqueça de concluir: "${task.title}"`,
+                     icon: '/vite.svg', // Replace with your app's icon
+                 });
+             }
+        }
+    });
+  }, [tasks, notificationPermission]);
+
+  useEffect(() => {
+      scheduleNotifications();
+      const interval = setInterval(scheduleNotifications, 60 * 60 * 1000); // Check every hour
+      return () => clearInterval(interval);
+  }, [scheduleNotifications]);
+
+
+  // --- CRUD & State Management ---
 
   const handleAddTask = () => {
-    const newTaskId = Date.now().toString();
-    const todayStr = new Date().toISOString().split('T')[0];
+    const newId = Date.now().toString();
     const newTask: TaskType = {
-      id: newTaskId,
+      id: newId,
       title: 'Nova Tarefa',
       content: [],
-      priority: 'none',
-      dueDate: mainView === 'today' ? todayStr : '',
-      category: categoryFilter !== 'all' ? categoryFilter : '',
       archived: false,
       createdAt: new Date().toISOString(),
     };
     setTasks([newTask, ...tasks]);
-    setNewlyCreatedTaskId(newTaskId);
-  };
-
-  const handleDeleteTask = (taskId: string) => {
-    setTaskToDeleteId(taskId);
-  };
-
-  const handleConfirmDelete = () => {
-    if (!taskToDeleteId) return;
-    setTasks(tasks.filter((task) => task.id !== taskToDeleteId));
-    setTaskToDeleteId(null);
-  };
-
-  const handleCancelDelete = () => {
-    setTaskToDeleteId(null);
   };
   
-  const handleToggleArchiveTask = (taskId: string) => {
-    setTasks(
-      tasks.map((task) =>
-        task.id === taskId ? { ...task, archived: !task.archived } : task
-      )
+  const handleLiveCreateTasks = (newTasks: Array<{ title: string; subItems: string[] }>) => {
+    const createdTasks: TaskType[] = newTasks.map((taskData, index) => {
+        const taskId = `${Date.now()}-${index}`;
+        const content: SubItemBlock[] = (taskData.subItems || []).map((subItemText, subIndex) => ({
+            id: `${taskId}-${subIndex}`,
+            type: 'subitem',
+            text: subItemText,
+            completed: false,
+            children: []
+        }));
+        return {
+            id: taskId,
+            title: taskData.title,
+            content: content,
+            archived: false,
+            createdAt: new Date().toISOString(),
+        };
+    });
+    setTasks(prev => [...createdTasks, ...prev]);
+    setIsLiveConversationOpen(false); // Close modal after creation
+  };
+
+  const handleUpdateTaskTitle = (id: string, title: string) => {
+    setTasks(tasks.map(task => (task.id === id ? { ...task, title } : task)));
+  };
+
+  const handleDeleteTask = (id: string) => {
+    setTasks(prevTasks =>
+        prevTasks.map(task =>
+            task.id === id ? { ...task, deletedAt: new Date().toISOString() } : task
+        )
+    );
+    setRecentlyDeletedBlock(null); // Clear undo state when deleting a task
+  };
+  
+  const handleRestoreTask = (id:string) => {
+    setTasks(prevTasks =>
+        prevTasks.map(task =>
+            task.id === id ? { ...task, deletedAt: undefined, archived: false } : task // Also unarchive when restoring
+        )
     );
   };
 
-  const handleUpdateTaskTitle = (taskId: string, newTitle: string) => {
-    setTasks(
-      tasks.map((task) =>
-        task.id === taskId ? { ...task, title: newTitle } : task
-      )
-    );
-  };
-
-  const handleUpdateTaskDetails = (taskId: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category' | 'color'>>) => {
-    const finalDetails = { ...details };
-    if (typeof finalDetails.category === 'string') {
-        const trimmedCategory = finalDetails.category.trim();
-        if (trimmedCategory && !categories.includes(trimmedCategory)) {
-            setCategories(prev => [...prev, trimmedCategory].sort());
-        }
-        finalDetails.category = trimmedCategory;
-    }
-
-    setTasks(tasks.map(task => 
-        task.id === taskId ? { ...task, ...finalDetails } : task
-    ));
+  const handlePermanentlyDeleteTask = (id: string) => {
+    setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
   };
   
+  const handleEmptyTrash = () => {
+    setTasks(prevTasks => prevTasks.filter(task => !task.deletedAt));
+    setIsConfirmingEmptyTrash(false);
+  };
+
+  const handleUpdateTaskDetails = (id: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category' | 'color' | 'tags'>>) => {
+    setTasks(tasks.map(task => (task.id === id ? { ...task, ...details } : task)));
+  };
+
+  const handleToggleArchiveTask = (id: string) => {
+    setTasks(tasks.map(task => (task.id === id ? { ...task, archived: !task.archived } : task)));
+  };
+
   const handleAddBlock = (taskId: string, type: 'subitem' | 'text') => {
     setTasks(tasks.map(task => {
-        if (task.id === taskId) {
-            if (type === 'subitem') {
-                const newBlock: SubItemBlock = { id: Date.now().toString(), type: 'subitem', text: '', completed: false, children: [] };
-                return { ...task, content: [...task.content, newBlock] };
-            } else { // type === 'text'
-                const newBlock: TextBlock = { id: Date.now().toString(), type: 'text', text: '' };
-                return { ...task, content: [...task.content, newBlock] };
-            }
-        }
-        return task;
+      if (task.id === taskId) {
+        const newBlock: ContentBlock = type === 'subitem'
+          ? { id: Date.now().toString(), type: 'subitem', text: '', completed: false, children: [] }
+          : { id: Date.now().toString(), type: 'text', text: '' };
+        return { ...task, content: [...task.content, newBlock] };
+      }
+      return task;
     }));
   };
-
+  
   const handleAddAttachment = (taskId: string, file: File) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
-      if (typeof e.target?.result === 'string') {
-        const newAttachment: AttachmentBlock = {
-          id: Date.now().toString(),
-          type: 'attachment',
-          fileName: file.name,
-          fileType: file.type,
-          dataUrl: e.target.result,
-          size: file.size,
-        };
-
-        setTasks(currentTasks => currentTasks.map(task => {
-          if (task.id === taskId) {
-            return { ...task, content: [...task.content, newAttachment] };
-          }
-          return task;
-        }));
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+         const newBlock: AttachmentBlock = {
+           id: Date.now().toString(),
+           type: 'attachment',
+           fileName: file.name,
+           fileType: file.type,
+           size: file.size,
+           dataUrl: dataUrl
+         };
+         setTasks(tasks.map(task => {
+            if (task.id === taskId) {
+              return { ...task, content: [...task.content, newBlock] };
+            }
+            return task;
+         }));
       }
-    };
-    reader.onerror = (error) => {
-      console.error("Error reading file:", error);
-      alert("Não foi possível ler o arquivo.");
     };
     reader.readAsDataURL(file);
   };
@@ -640,246 +545,209 @@ const App: React.FC = () => {
   const handleUpdateBlock = (taskId: string, blockId: string, updates: Partial<ContentBlock>) => {
     setTasks(tasks.map(task => {
       if (task.id === taskId) {
-        const [newContentTree, foundInTree] = mapContentTree(task.content, blockId, (block) => {
-          return { ...block, ...updates as Partial<SubItemBlock> };
-        });
-
-        if (foundInTree) {
-          return { ...task, content: newContentTree };
-        }
-
-        const newContent = task.content.map(block => 
-          block.id === blockId ? { ...block, ...updates } : block
-        );
-        return { ...task, content: newContent as ContentBlock[] };
+        const [newContent, _] = mapContentTree(task.content, blockId, (block) => ({ ...block, ...updates }));
+        return { ...task, content: newContent };
       }
       return task;
     }));
   };
 
+  const handleClearUndoState = useCallback(() => {
+    if (undoTimeoutRef.current) {
+        clearTimeout(undoTimeoutRef.current);
+        undoTimeoutRef.current = null;
+    }
+    setRecentlyDeletedBlock(null);
+  }, []);
+
   const handleDeleteBlock = (taskId: string, blockId: string) => {
-    if (undoTimeoutRef.current) {
-        clearTimeout(undoTimeoutRef.current);
-    }
-
-    const taskToUpdate = tasks.find(t => t.id === taskId);
-    if (!taskToUpdate) return;
-
-    const originalTaskContent = taskToUpdate.content;
-    const deletedBlock = findBlockInTree(originalTaskContent, blockId);
-
-    if (!deletedBlock) return;
-
-    const [newContent] = filterContentTree(originalTaskContent, blockId);
-
-    setTasks(currentTasks => currentTasks.map(task => 
-        task.id === taskId ? { ...task, content: newContent } : task
-    ));
-
-    setRecentlyDeleted({ block: deletedBlock, taskId, originalTaskContent });
+    handleClearUndoState();
+    let originalIndex = -1;
+    let deletedBlock: ContentBlock | null = null;
     
-    undoTimeoutRef.current = window.setTimeout(() => {
-        setRecentlyDeleted(null);
-        undoTimeoutRef.current = null;
-    }, 5000);
-  };
-
-  const handleUndoDeleteBlock = () => {
-    if (!recentlyDeleted) return;
-
-    if (undoTimeoutRef.current) {
-        clearTimeout(undoTimeoutRef.current);
-        undoTimeoutRef.current = null;
-    }
-
-    setTasks(currentTasks => currentTasks.map(task => {
-        if (task.id === recentlyDeleted.taskId) {
-            return { ...task, content: recentlyDeleted.originalTaskContent };
+    setTasks(tasks.map(task => {
+        if (task.id === taskId) {
+            originalIndex = task.content.findIndex(b => b.id === blockId);
+            deletedBlock = findBlockInTree(task.content, blockId);
+            const [newContent, _] = filterContentTree(task.content, blockId);
+            return { ...task, content: newContent };
         }
         return task;
     }));
 
-    setRecentlyDeleted(null);
+    if (deletedBlock) {
+        setRecentlyDeletedBlock({ block: deletedBlock, taskId, originalIndex });
+        undoTimeoutRef.current = window.setTimeout(handleClearUndoState, 5000);
+    }
   };
+  
+  const handleUndoDeleteBlock = () => {
+    if (!recentlyDeletedBlock) return;
+    const { block, taskId, originalIndex } = recentlyDeletedBlock;
 
+    setTasks(prevTasks => prevTasks.map(task => {
+        if (task.id === taskId) {
+            const newContent = [...task.content];
+            if (originalIndex >= 0 && originalIndex <= newContent.length) {
+                newContent.splice(originalIndex, 0, block);
+            } else {
+                newContent.push(block);
+            }
+            return { ...task, content: newContent };
+        }
+        return task;
+    }));
+    
+    handleClearUndoState();
+  };
 
   const handleToggleSubItem = (taskId: string, subItemId: string) => {
     setTasks(tasks.map(task => {
       if (task.id === taskId) {
-        const toggleAndUpdate = (content: ContentBlock[]): [ContentBlock[], boolean] => {
-            let wasUnchecked = false;
-            let found = false;
-            
-            const newContent = content.map(block => {
-                if (found || block.type !== 'subitem') return block;
-
-                if (block.id === subItemId) {
-                    found = true;
-                    const newCompleted = !block.completed;
-                    if (!newCompleted) wasUnchecked = true;
-                    
-                    const newChildren = block.children.map(function markAllChildren(child): SubItemBlock {
-                        return { ...child, completed: newCompleted, children: child.children.map(markAllChildren) };
-                    });
-                    return { ...block, completed: newCompleted, children: newChildren };
-                }
-
-                if (block.children.length > 0) {
-                    const [newChildren, childWasUnchecked] = toggleAndUpdate(block.children);
-                    if (childWasUnchecked) {
-                        wasUnchecked = true;
-                        return { ...block, children: newChildren as SubItemBlock[], completed: false };
-                    }
-                    return { ...block, children: newChildren as SubItemBlock[] };
-                }
-                return block;
-            });
-
-            return [newContent, wasUnchecked];
-        };
-        
-        const [finalContent] = toggleAndUpdate(task.content);
-        return { ...task, content: finalContent };
+        const [newContent, _] = mapContentTree(task.content, subItemId, (block) => ({ ...block, completed: !block.completed }));
+        return { ...task, content: newContent };
       }
       return task;
     }));
   };
   
-  const handleToggleAllSubItems = (taskId: string, completed: boolean) => {
-    const updateAllChildren = (items: ContentBlock[]): ContentBlock[] => {
-        return items.map(item => {
-            if (item.type === 'subitem') {
-                return {
-                    ...item,
-                    completed: completed,
-                    children: updateAllChildren(item.children) as SubItemBlock[]
-                };
-            }
-            return item;
-        });
-    };
-
-    setTasks(currentTasks => 
-        currentTasks.map(task => {
-            if (task.id === taskId) {
-                return { ...task, content: updateAllChildren(task.content) };
-            }
-            return task;
-        })
-    );
+  // FIX: Refactored the recursive function `setCompletionRecursively` to use function overloads.
+  // This provides better type inference for recursive calls, resolving the type error without an unsafe cast.
+  const handleToggleAllSubItems = (taskId: string, shouldBeCompleted: boolean) => {
+     setTasks(tasks.map(task => {
+        if (task.id !== taskId) return task;
+        
+        function setCompletionRecursively(items: SubItemBlock[]): SubItemBlock[];
+        function setCompletionRecursively(items: ContentBlock[]): ContentBlock[];
+        function setCompletionRecursively(items: ContentBlock[]): ContentBlock[] {
+            return items.map(item => {
+                if (item.type === 'subitem') {
+                    // With overloads, the cast is no longer needed.
+                    // The recursive call with item.children (SubItemBlock[]) will return SubItemBlock[].
+                    return {
+                        ...item,
+                        completed: shouldBeCompleted,
+                        children: setCompletionRecursively(item.children)
+                    };
+                }
+                return item;
+            });
+        };
+        
+        return { ...task, content: setCompletionRecursively(task.content) };
+    }));
   };
+
 
   const handleAddNestedSubItem = (taskId: string, parentId: string) => {
-      setTasks(tasks.map(task => {
-          if (task.id === taskId) {
-              const newSubItem: SubItemBlock = { id: Date.now().toString(), type: 'subitem', text: '', completed: false, children: [] };
-              const [newContent, found] = mapContentTree(task.content, parentId, (block) => ({
-                  ...block,
-                  children: [...block.children, newSubItem]
-              }));
-
-              if (found) {
-                  return { ...task, content: newContent };
-              }
-          }
-          return task;
-      }));
+    const newSubItem: SubItemBlock = {
+      id: Date.now().toString(),
+      type: 'subitem',
+      text: '',
+      completed: false,
+      children: [],
+    };
+    setTasks(tasks.map(task => {
+      if (task.id === taskId) {
+        const [newContent, _] = mapContentTree(task.content, parentId, (block) => ({
+            ...block,
+            children: [...block.children, newSubItem]
+        }));
+        return { ...task, content: newContent };
+      }
+      return task;
+    }));
   };
-
+  
   const handleMoveBlock = (taskId: string, sourceId: string, targetId: string | null, position: 'before' | 'after' | 'end') => {
-    setTasks(currentTasks => {
-        const taskIndex = currentTasks.findIndex(t => t.id === taskId);
-        if (taskIndex === -1) return currentTasks;
+    setTasks(prevTasks => prevTasks.map(task => {
+      if (task.id !== taskId) return task;
 
-        const task = currentTasks[taskIndex];
-        let sourceBlock: ContentBlock | null = null;
+      let sourceBlock: ContentBlock | null = null;
 
-        function removeSource(content: ContentBlock[]): ContentBlock[] {
-            const result: ContentBlock[] = [];
-            for (const block of content) {
-                if (block.id === sourceId) {
-                    sourceBlock = block;
-                    continue;
+      // Find and remove source block
+      const removeSource = (content: ContentBlock[]): ContentBlock[] => {
+        return content.reduce((acc, block) => {
+          if (block.id === sourceId) {
+            sourceBlock = block;
+            return acc;
+          }
+          if (block.type === 'subitem' && block.children.length > 0) {
+            // FIX: Spreading a discriminated union (`...block`) can confuse TypeScript inside a `reduce` callback.
+            // Reconstructing the object explicitly avoids type ambiguity and resolves the error.
+            const updatedBlock: SubItemBlock = {
+              id: block.id,
+              type: 'subitem',
+              text: block.text,
+              completed: block.completed,
+              children: removeSource(block.children) as SubItemBlock[],
+            };
+            return [...acc, updatedBlock];
+          }
+          return [...acc, block];
+        }, [] as ContentBlock[]);
+      };
+      
+      let newContent = removeSource(task.content);
+      if (!sourceBlock) return task; // Source not found, do nothing
+
+      // Insert source block at target position
+      const insertTarget = (content: ContentBlock[]): ContentBlock[] => {
+         if (targetId === null && position === 'end') {
+             return [...content, sourceBlock!];
+         }
+         
+         return content.reduce((acc, block) => {
+            if (block.id === targetId) {
+                if (position === 'before') {
+                    return [...acc, sourceBlock!, block];
                 }
-                if (block.type === 'subitem' && block.children?.length > 0) {
-                    result.push({ ...block, children: removeSource(block.children) as SubItemBlock[] });
-                } else {
-                    result.push(block);
+                if (position === 'after') {
+                    return [...acc, block, sourceBlock!];
                 }
             }
-            return result;
-        }
-
-        const contentWithoutSource = removeSource(task.content);
-
-        if (!sourceBlock) {
-            return currentTasks;
-        }
-
-        let newContent: ContentBlock[];
-
-        if (position === 'end' || !targetId) {
-            newContent = [...contentWithoutSource, sourceBlock];
-        } else {
-            function insertSource(content: ContentBlock[]): [ContentBlock[], boolean] {
-                const result: ContentBlock[] = [];
-                let inserted = false;
-                for (const block of content) {
-                    if (inserted) {
-                      result.push(block);
-                      continue;
-                    }
-                    if (block.id === targetId) {
-                        if (position === 'before') {
-                            result.push(sourceBlock!, block);
-                        } else {
-                            result.push(block, sourceBlock!);
-                        }
-                        inserted = true;
-                        continue;
-                    }
-                    if (block.type === 'subitem' && block.children?.length > 0) {
-                        const [newChildren, childInserted] = insertSource(block.children);
-                        if (childInserted) inserted = true;
-                        result.push({ ...block, children: newChildren as SubItemBlock[] });
-                    } else {
-                        result.push(block);
-                    }
-                }
-                return [result, inserted];
+             if (block.type === 'subitem' && block.children.length > 0) {
+                // FIX: Spreading a discriminated union (`...block`) can confuse TypeScript inside a `reduce` callback.
+                // Reconstructing the object explicitly avoids type ambiguity and resolves the error.
+                const updatedBlock: SubItemBlock = {
+                  id: block.id,
+                  type: 'subitem',
+                  text: block.text,
+                  completed: block.completed,
+                  children: insertTarget(block.children) as SubItemBlock[],
+                };
+                return [...acc, updatedBlock];
             }
-            [newContent] = insertSource(contentWithoutSource);
-        }
-
-        const newTasks = [...currentTasks];
-        newTasks[taskIndex] = { ...task, content: newContent };
-        return newTasks;
-    });
+            return [...acc, block];
+         }, [] as ContentBlock[]);
+      };
+      
+      newContent = insertTarget(newContent);
+      return { ...task, content: newContent };
+    }));
   };
   
   const handleMoveTask = (sourceId: string, targetId: string, position: 'before' | 'after') => {
-    setTasks(currentTasks => {
-      const sourceIndex = currentTasks.findIndex(t => t.id === sourceId);
-      const targetIndex = currentTasks.findIndex(t => t.id === targetId);
+    setTasks(prevTasks => {
+        const sourceIndex = prevTasks.findIndex(t => t.id === sourceId);
+        const targetIndex = prevTasks.findIndex(t => t.id === targetId);
 
-      if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
-        return currentTasks;
-      }
+        if (sourceIndex === -1 || targetIndex === -1) return prevTasks;
+        
+        const [removed] = prevTasks.splice(sourceIndex, 1);
+        const newTargetIndex = prevTasks.findIndex(t => t.id === targetId);
+        
+        if (position === 'before') {
+            prevTasks.splice(newTargetIndex, 0, removed);
+        } else { // 'after'
+            prevTasks.splice(newTargetIndex + 1, 0, removed);
+        }
 
-      const newTasks = Array.from(currentTasks);
-      const [movedTask] = newTasks.splice(sourceIndex, 1);
-      
-      const newTargetIndex = newTasks.findIndex(t => t.id === targetId);
-
-      if (position === 'before') {
-        newTasks.splice(newTargetIndex, 0, movedTask);
-      } else { // 'after'
-        newTasks.splice(newTargetIndex + 1, 0, movedTask);
-      }
-
-      return newTasks;
+        return [...prevTasks];
     });
   };
+  
+  // --- AI Features ---
 
   const handleSuggestSubItems = async (taskId: string) => {
     if (!process.env.API_KEY) {
@@ -887,767 +755,502 @@ const App: React.FC = () => {
         return;
     }
 
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    setTasks(currentTasks => currentTasks.map(t => t.id === taskId ? { ...t, isSuggesting: true } : t));
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, isSuggesting: true } : t));
 
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
 
-        const taskContent = task.content.map(block => {
-            if (block.type === 'subitem') return `- (Subitem) ${block.text}`;
-            if (block.type === 'text') return `- (Texto) ${block.text}`;
-            return '';
-        }).join('\n');
+        const existingSubItems = getAllSubItems(task.content).map(item => item.text).join(', ');
 
         const prompt = `
-            Com base na seguinte tarefa, sugira 3 a 5 próximos passos ou subtarefas acionáveis para ajudar a completá-la.
-            Responda apenas com um objeto JSON contendo uma chave "suggestions" com uma array de strings.
-            As sugestões devem ser curtas, claras e começar com um verbo de ação.
-            Não inclua subtarefas que já existem.
-
-            Título da Tarefa: "${task.title}"
-            Conteúdo Atual:
-            ${taskContent || "Nenhum conteúdo ainda."}
+            Baseado no título da tarefa "${task.title}", gere uma lista de 3 a 5 subtarefas acionáveis em português.
+            As subtarefas devem ser curtas e diretas.
+            ${existingSubItems.length > 0 ? `As seguintes subtarefas já existem, então não as repita: ${existingSubItems}.` : ''}
+            Responda APENAS com um array JSON de strings, como este: ["Fazer X", "Pesquisar Y", "Revisar Z"]
         `;
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        suggestions: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.STRING
-                            }
-                        }
-                    }
-                }
-            }
+            config: { responseMimeType: 'application/json' },
         });
-        
-        const jsonStr = response.text.trim();
-        const result = JSON.parse(jsonStr) as { suggestions: string[] };
 
-        if (result.suggestions && result.suggestions.length > 0) {
-            const newSubItems: SubItemBlock[] = result.suggestions.map(suggestionText => ({
-                id: Date.now().toString() + Math.random(),
-                type: 'subitem',
-                text: suggestionText,
-                completed: false,
-                children: [],
-            }));
+        const suggestions: string[] = JSON.parse(response.text);
 
-            setTasks(currentTasks => currentTasks.map(t => {
-                if (t.id === taskId) {
-                    return { ...t, content: [...t.content, ...newSubItems] };
-                }
-                return t;
-            }));
-        } else {
-            alert("A IA não conseguiu gerar sugestões para esta tarefa.");
-        }
+        setTasks(prev => prev.map(t => {
+            if (t.id === taskId) {
+                const newSubItems: SubItemBlock[] = suggestions.map(text => ({
+                    id: `${Date.now()}-${Math.random()}`,
+                    type: 'subitem',
+                    text: text,
+                    completed: false,
+                    children: []
+                }));
+                return { ...t, content: [...t.content, ...newSubItems], isSuggesting: false };
+            }
+            return t;
+        }));
 
     } catch (error) {
         console.error("Error suggesting sub-items:", error);
-        alert("Ocorreu um erro ao gerar sugestões. Tente novamente.");
-    } finally {
-        setTasks(currentTasks => currentTasks.map(t => t.id === taskId ? { ...t, isSuggesting: false } : t));
+        alert("Não foi possível gerar sugestões. Verifique o console para mais detalhes.");
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, isSuggesting: false } : t));
     }
   };
-
-  const handleExportData = () => {
-    try {
-      const dataToExport: BackupData = {
-        version: 1,
-        tasks: tasks,
-        savedAnalyses: savedAnalyses,
+  
+  const handleSaveAnalysis = (content: string) => {
+      const newAnalysis: SavedAnalysis = {
+          id: Date.now().toString(),
+          title: `Análise de ${new Date().toLocaleDateString('pt-BR')}`,
+          content,
+          createdAt: new Date().toISOString(),
       };
-      const dataStr = JSON.stringify(dataToExport, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(dataBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      const date = new Date().toISOString().split('T')[0];
-      link.download = `checklist-backup-${date}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      setIsSettingsOpen(false);
-    } catch (error) {
-      console.error("Failed to export data", error);
-      alert("Ocorreu um erro ao exportar os dados.");
-    }
+      setSavedAnalyses(prev => [...prev, newAnalysis]);
   };
-
-  const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
+  
+  const handleDeleteAnalysis = (id: string) => {
+      setSavedAnalyses(prev => prev.filter(a => a.id !== id));
+  };
+  
+  // --- Data Export/Import ---
+  const handleExportData = () => {
+      const backupData: BackupData = {
+          version: 2,
+          tasks: tasks,
+          savedAnalyses: savedAnalyses,
+      };
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `checklist_backup_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+  };
+  
+  const handleImportFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      try {
-        const text = e.target?.result;
-        if (typeof text === 'string') {
-          const importedData = JSON.parse(text);
-          // Validation
-          if (
-            typeof importedData === 'object' &&
-            importedData !== null &&
-            'version' in importedData &&
-            'tasks' in importedData && Array.isArray(importedData.tasks) &&
-            'savedAnalyses' in importedData && Array.isArray(importedData.savedAnalyses)
-          ) {
-            setImportFileData(importedData as BackupData);
-            setIsSettingsOpen(false);
-          } else {
-            throw new Error("Formato de arquivo inválido ou faltando campos obrigatórios (version, tasks, savedAnalyses).");
-          }
+        try {
+            const result = e.target?.result as string;
+            const data = JSON.parse(result) as BackupData;
+            // Basic validation
+            if (data && Array.isArray(data.tasks) && (data.savedAnalyses === undefined || Array.isArray(data.savedAnalyses))) {
+                setImportFileData(data);
+                setIsImportConfirmationOpen(true);
+            } else {
+                alert("Arquivo de backup inválido.");
+            }
+        } catch (error) {
+            alert("Erro ao ler o arquivo de backup.");
+            console.error("Import error:", error);
         }
-      } catch (error) {
-        console.error("Failed to import data", error);
-        alert(`Ocorreu um erro ao importar os dados. Verifique o formato do arquivo.\n\nDetalhes: ${error instanceof Error ? error.message : String(error)}`);
-      }
     };
     reader.readAsText(file);
     event.target.value = ''; // Reset file input
   };
   
   const handleConfirmImport = (mode: 'merge' | 'replace') => {
-    if (!importFileData) return;
+      if (!importFileData) return;
 
-    const { tasks: importedTasks, savedAnalyses: importedAnalyses } = importFileData;
-    const migratedTasks = importedTasks.map(task => ({
-        ...task,
-        archived: task.archived || false,
-        content: migrateContent(task.content || []),
-        createdAt: task.createdAt || new Date().toISOString(),
-    }));
+      if (mode === 'replace') {
+          setTasks(importFileData.tasks || []);
+          setSavedAnalyses(importFileData.savedAnalyses || []);
+      } else { // merge
+          const existingTaskIds = new Set(tasks.map(t => t.id));
+          const newTasks = importFileData.tasks.filter(t => !existingTaskIds.has(t.id));
 
-    if (mode === 'replace') {
-      setTasks(migratedTasks);
-      setSavedAnalyses(importedAnalyses);
-    } else { // merge
-        const regenerateContentIds = (content: ContentBlock[]): ContentBlock[] => {
-            return content.map(block => {
-                const newBlock = { ...block, id: `${Date.now()}-${Math.random()}` };
-                if (newBlock.type === 'subitem' && newBlock.children?.length > 0) {
-                newBlock.children = regenerateContentIds(newBlock.children) as SubItemBlock[];
-                }
-                return newBlock;
-            });
-        };
+          const existingAnalysisIds = new Set(savedAnalyses.map(a => a.id));
+          const newAnalyses = (importFileData.savedAnalyses || []).filter(a => !existingAnalysisIds.has(a.id));
 
-        const newTasks = migratedTasks.map(task => ({
-            ...task,
-            id: `${Date.now()}-${Math.random()}`,
-            content: regenerateContentIds(task.content)
-        }));
-
-        const newAnalyses = importedAnalyses.map(analysis => ({
-            ...analysis,
-            id: new Date().toISOString() + Math.random()
-        }));
-
-        setTasks(prev => [...prev, ...newTasks]);
-        setSavedAnalyses(prev => [...prev, ...newAnalyses]);
-    }
-    
-    // Update categories from all tasks after import
-    const allTasks = mode === 'replace' ? migratedTasks : [...tasks, ...migratedTasks];
-    const updatedCategories = Array.from(new Set(allTasks.map(t => t.category).filter(Boolean)));
-    setCategories(updatedCategories.sort());
-
-    setImportFileData(null);
+          setTasks(prev => [...prev, ...newTasks]);
+          setSavedAnalyses(prev => [...prev, ...newAnalyses]);
+      }
+      setIsImportConfirmationOpen(false);
+      setImportFileData(null);
   };
 
-  const handleCancelImport = () => {
-    setImportFileData(null);
-  };
-
-  const handleResetData = () => {
-      setShowResetConfirmation(true);
-  };
   
-  const handleConfirmReset = () => {
+  // --- App Reset ---
+
+  const handleResetApp = () => {
     setTasks(initialTasks);
     setSavedAnalyses([]);
-    const initialCategories = Array.from(new Set(initialTasks.map(t => t.category).filter(Boolean)));
-    setCategories(initialCategories.sort());
-    setPriorityFilter('all');
-    setCategoryFilter('all');
-    setStatusFilter('all');
-    setShowResetConfirmation(false);
-    setIsSettingsOpen(false);
-    // Note: This doesn't clear cloud data for logged-in users, only local state.
-    // For a full reset, we'd need a cloudStorage.delete() method.
-  };
-
-  const handleRequestNotificationPermission = async () => {
-    if ('Notification' in window) {
-      const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
+    setIsConfirmingReset(false);
+    // Optionally clear local storage if guest mode is persistent
+    if (user?.id === 'guest') {
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+        localStorage.removeItem(ANALYSES_STORAGE_KEY);
     }
   };
+  
+  // --- Category Management ---
+  const categories = [...new Set(tasks.map(t => t.category).filter(Boolean) as string[])].sort();
 
   const handleAddCategory = () => {
-    const trimmedName = newCategoryName.trim();
-    if (trimmedName && !categories.includes(trimmedName)) {
-      setCategories(prev => [...prev, trimmedName].sort());
-    }
-    setNewCategoryName('');
-    setIsAddingCategory(false);
-  };
-  
-  const handleDeleteCategory = (categoryName: string) => {
-    setCategoryToDelete(categoryName);
-  };
-
-  const handleConfirmDeleteCategory = () => {
-    if (!categoryToDelete) return;
-
-    setTasks(prevTasks =>
-      prevTasks.map(task =>
-        task.category === categoryToDelete ? { ...task, category: '' } : task
-      )
-    );
-
-    setCategories(prevCategories =>
-      prevCategories.filter(c => c !== categoryToDelete)
-    );
-
-    if (categoryFilter === categoryToDelete) {
-      setCategoryFilter('all');
-    }
-    
-    setCategoryToDelete(null);
-  };
-
-  const handleCancelDeleteCategory = () => {
-    setCategoryToDelete(null);
-  };
-  
-  const handleSaveAnalysis = (content: string) => {
-    const now = new Date();
-    const newAnalysis: SavedAnalysis = {
-        id: now.toISOString(),
-        title: `Análise de ${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit'})}`,
-        content: content,
-        createdAt: now.toISOString(),
-    };
-    setSavedAnalyses(prev => [newAnalysis, ...prev]);
-  };
-
-  const handleDeleteAnalysis = (id: string) => {
-    setAnalysisToDeleteId(id);
-  };
-
-  const handleConfirmDeleteAnalysis = () => {
-      if (!analysisToDeleteId) return;
-      setSavedAnalyses(prev => prev.filter(a => a.id !== analysisToDeleteId));
-      setAnalysisToDeleteId(null);
-  };
-  
-  const handleCancelDeleteAnalysis = () => {
-      setAnalysisToDeleteId(null);
-  };
-
-  const handleAITasksCreation = (createdTasks: Array<{ title: string; subItems: string[] }>) => {
-    const newTasks: TaskType[] = createdTasks.map(taskData => {
-      const taskId = Date.now().toString() + Math.random();
-      const content: SubItemBlock[] = (taskData.subItems || []).map((subItemText, index) => ({
-        id: `${taskId}-${index}`,
-        type: 'subitem',
-        text: subItemText,
-        completed: false,
-        children: [],
-      }));
-      
-      return {
-        id: taskId,
-        title: taskData.title,
-        content: content,
-        priority: 'none',
-        dueDate: '',
-        category: categoryFilter !== 'all' ? categoryFilter : '',
-        archived: false,
-        createdAt: new Date().toISOString(),
-      };
-    });
-
-    if (newTasks.length > 0) {
-      setNewlyCreatedTaskId(newTasks[0].id);
-    }
-    setTasks(prevTasks => [...newTasks, ...prevTasks]);
-    setIsLiveConversationOpen(false); // Close modal after creation
-  };
-
- const handleThemeChange = (newTheme: Theme) => {
-    try {
-      window.localStorage.setItem(THEME_STORAGE_KEY, newTheme);
-    } catch (error) {
-       console.error("Could not save theme to localStorage", error);
-    }
-    setTheme(newTheme);
-  };
-
-  const searchScopeOptions: Record<SearchScope, string> = {
-    all: 'Tudo',
-    title: 'Título',
-    content: 'Conteúdo',
-    category: 'Categoria',
-  };
-
-  const filteredTasks = tasks.filter((task) => {
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    const isViewMatch =
-      mainView === 'active'
-        ? !task.archived
-        : mainView === 'archived'
-        ? task.archived
-        : !task.archived && task.dueDate?.startsWith(todayStr); // 'today'
-
-    const isPriorityMatch = priorityFilter === 'all' || task.priority === priorityFilter;
-    const isCategoryMatch = categoryFilter === 'all' || task.category === categoryFilter;
-
-    const isStatusMatch = () => {
-      if (statusFilter === 'all') return true;
-      
-      const allSubItems = getAllSubItems(task.content);
-      if (allSubItems.length === 0) {
-        // Tasks without subitems are considered 'in-progress'
-        return statusFilter === 'in-progress';
+      if (newCategoryName.trim() && !categories.includes(newCategoryName.trim())) {
+          // This doesn't create a task, just makes the category available.
+          // A better approach might be to just let users type categories freely.
+          // For now, let's say adding a category selects it.
+          setCategoryFilter(newCategoryName.trim());
       }
-      
-      const allCompleted = allSubItems.every(item => item.completed);
-      
-      if (statusFilter === 'completed') return allCompleted;
-      if (statusFilter === 'in-progress') return !allCompleted;
-      
-      return false;
-    };
+      setNewCategoryName('');
+      setIsAddingCategory(false);
+  };
 
-    const searchLower = searchQuery.toLowerCase().trim();
-    if (!searchLower) {
-      return isViewMatch && isPriorityMatch && isCategoryMatch && isStatusMatch();
+  const handleDeleteCategory = (categoryToDelete: string) => {
+      setTasks(tasks.map(task => {
+          if (task.category === categoryToDelete) {
+              return { ...task, category: undefined };
+          }
+          return task;
+      }));
+      if (categoryFilter === categoryToDelete) {
+          setCategoryFilter('all');
+      }
+  };
+  
+  const handleLogout = () => {
+      setUser(null);
+      setView('home');
+      setTasks([]);
+      setSavedAnalyses([]);
+  };
+
+  // --- Filtering & Derived State ---
+  const archivedTaskCount = tasks.filter(t => t.archived && !t.deletedAt).length;
+  const trashedTaskCount = tasks.filter(t => !!t.deletedAt).length;
+  const allTags = [...new Set(tasks.flatMap(t => t.tags || []))].sort();
+
+  const getFilteredTasks = useCallback(() => {
+    let tasksToDisplay: TaskType[];
+
+    if (mainView === 'trash') {
+        tasksToDisplay = tasks.filter(task => !!task.deletedAt);
+        return tasksToDisplay.sort((a, b) => new Date(b.deletedAt!).getTime() - new Date(a.deletedAt!).getTime());
     }
 
-    const checkContent = (content: ContentBlock[]): boolean => {
-        for (const block of content) {
-            if (block.type === 'text' && block.text.toLowerCase().includes(searchLower)) {
-                return true;
-            }
-            if (block.type === 'subitem') {
-                if (block.text.toLowerCase().includes(searchLower)) {
-                    return true;
-                }
-                if (block.children && checkContent(block.children)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    };
+    const nonDeletedTasks = tasks.filter(task => !task.deletedAt);
 
-    let isSearchMatch = false;
-    switch (searchScope) {
-        case 'title':
-            isSearchMatch = task.title.toLowerCase().includes(searchLower);
-            break;
-        case 'content':
-            isSearchMatch = checkContent(task.content);
-            break;
-        case 'category':
-            isSearchMatch = task.category?.toLowerCase().includes(searchLower) ?? false;
-            break;
-        case 'all':
-        default:
-            isSearchMatch = task.title.toLowerCase().includes(searchLower) ||
-                            (task.category && task.category.toLowerCase().includes(searchLower)) ||
-                            checkContent(task.content);
-            break;
+    if (mainView === 'archived') {
+      tasksToDisplay = nonDeletedTasks.filter(task => task.archived);
+    } else { // 'active' or 'today'
+      tasksToDisplay = nonDeletedTasks.filter(task => !task.archived);
+      if (mainView === 'today') {
+        const todayStr = new Date().toISOString().split('T')[0];
+        tasksToDisplay = tasksToDisplay.filter(task => task.dueDate?.startsWith(todayStr));
+      }
     }
     
-    return isViewMatch && isPriorityMatch && isCategoryMatch && isStatusMatch() && isSearchMatch;
-  });
+    // Apply search
+    if (searchTerm) {
+        tasksToDisplay = tasksToDisplay.filter(task => {
+            const term = searchTerm.toLowerCase();
+            const inTitle = task.title.toLowerCase().includes(term);
+            const inContent = searchScope === 'all' || searchScope === 'content'
+                ? task.content.some(block => 'text' in block && block.text.toLowerCase().includes(term))
+                : false;
+            const inCategory = searchScope === 'all' || searchScope === 'category'
+                ? task.category?.toLowerCase().includes(term)
+                : false;
+            
+            switch (searchScope) {
+                case 'title': return inTitle;
+                case 'content': return inContent;
+                case 'category': return inCategory;
+                default: return inTitle || inContent || inCategory;
+            }
+        });
+    }
 
-  const archivedTaskCount = tasks.filter(t => t.archived).length;
+    // Apply filters
+    if (categoryFilter !== 'all') {
+      tasksToDisplay = tasksToDisplay.filter(task => task.category === categoryFilter);
+    }
+    if (priorityFilter !== 'all') {
+      tasksToDisplay = tasksToDisplay.filter(task => (task.priority || 'none') === priorityFilter);
+    }
+     if (statusFilter !== 'all') {
+        tasksToDisplay = tasksToDisplay.filter(task => {
+            const subItems = getAllSubItems(task.content);
+            if (subItems.length === 0) return statusFilter === 'in-progress'; // No items, can't be completed
+            const isCompleted = subItems.every(item => item.completed);
+            return statusFilter === 'completed' ? isCompleted : !isCompleted;
+        });
+    }
+    if (tagFilter !== 'all') {
+      tasksToDisplay = tasksToDisplay.filter(task => task.tags?.includes(tagFilter));
+    }
+    
+    return tasksToDisplay;
+  }, [tasks, mainView, searchTerm, searchScope, categoryFilter, priorityFilter, statusFilter, tagFilter]);
   
-  const { pageTitle, pageIcon } = (() => {
-    if (mainView === 'archived') return { pageTitle: 'Tarefas Arquivadas', pageIcon: <ArchiveIcon className="h-7 w-7" /> };
-    if (mainView === 'today') return { pageTitle: 'Tarefas para Hoje', pageIcon: <BellIcon className="h-7 w-7" /> };
-    if (categoryFilter !== 'all') return { pageTitle: categoryFilter, pageIcon: <TagIcon className="h-7 w-7" /> };
-    return { pageTitle: 'Suas Tarefas', pageIcon: <InboxIcon className="h-7 w-7" /> };
-  })();
+  const filteredTasks = getFilteredTasks();
 
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setCategoryFilter('all');
+    setPriorityFilter('all');
+    setStatusFilter('all');
+    setTagFilter('all');
+  };
+
+  const areFiltersActive = searchTerm || categoryFilter !== 'all' || priorityFilter !== 'all' || statusFilter !== 'all' || tagFilter !== 'all';
 
   if (view === 'home') {
-    return <HomeScreen onGuestLogin={handleGuestLogin} />;
+    return <HomeScreen onGuestLogin={guestLogin} />;
   }
-  
-  const FilterModal = () => (
-    <div 
-        className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center p-4"
-        onClick={() => setIsFilterModalOpen(false)}
-    >
-        <div 
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-sm border border-gray-200 dark:border-gray-700 animate-fade-in-scale"
-            onClick={e => e.stopPropagation()}
-        >
-            <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700">
-                <h2 className="text-xl font-bold text-teal-600 dark:text-teal-400 flex items-center gap-2">
-                    <FilterIcon />
-                    Filtros
-                </h2>
-                <button onClick={() => setIsFilterModalOpen(false)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Fechar filtros">
-                    <XIcon />
-                </button>
-            </div>
-            <div className="p-6 space-y-6">
-                 <div>
-                    <label htmlFor="priority-filter-modal" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Prioridade</label>
-                    <select
-                        id="priority-filter-modal"
-                        value={priorityFilter}
-                        onChange={(e) => setPriorityFilter(e.target.value as Priority | 'all')}
-                        className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
-                    >
-                        {Object.entries(priorityOptions).map(([key, label]) => (
-                            <option key={key} value={key}>{label}</option>
-                        ))}
-                    </select>
-                </div>
-                 <div>
-                    <label htmlFor="category-filter-modal" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
-                    <select
-                        id="category-filter-modal"
-                        value={categoryFilter}
-                        onChange={(e) => setCategoryFilter(e.target.value)}
-                        className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
-                    >
-                        <option value="all">Todas as Categorias</option>
-                        {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                    </select>
-                </div>
-                 <div>
-                    <label htmlFor="status-filter-modal" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-                    <select
-                        id="status-filter-modal"
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value as 'all' | 'completed' | 'in-progress')}
-                        className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
-                    >
-                        {Object.entries(statusOptions).map(([key, label]) => (
-                            <option key={key} value={key}>{label}</option>
-                        ))}
-                    </select>
-                </div>
-            </div>
-             <div className="bg-gray-50 dark:bg-gray-700/50 px-6 py-4 flex justify-end items-center gap-4 rounded-b-lg">
-                <button
-                    onClick={() => {
-                        setPriorityFilter('all');
-                        setCategoryFilter('all');
-                        setStatusFilter('all');
-                    }}
-                    className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400"
-                >
-                    Limpar Filtros
-                </button>
-                 <button
-                    onClick={() => setIsFilterModalOpen(false)}
-                    className="px-4 py-2 bg-teal-600 text-white font-semibold rounded-md hover:bg-teal-700 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500"
-                >
-                    Aplicar
-                </button>
-             </div>
-        </div>
-    </div>
-  );
-
-  const Drawer = () => (
-    <div
-      className={`fixed inset-0 z-40 lg:hidden transition-all duration-300 ${isDrawerOpen ? 'bg-black/50' : 'bg-transparent pointer-events-none'}`}
-      onClick={() => setIsDrawerOpen(false)}
-    >
-        <div
-            className={`fixed top-0 left-0 bottom-0 w-80 bg-gray-100 dark:bg-gray-800 p-6 shadow-2xl transition-transform duration-300 ease-in-out ${isDrawerOpen ? 'translate-x-0' : '-translate-x-full'}`}
-            onClick={(e) => e.stopPropagation()}
-        >
-          <Sidebar
-            tasks={tasks}
-            categories={categories}
-            mainView={mainView}
-            setMainView={setMainView}
-            categoryFilter={categoryFilter}
-            setCategoryFilter={setCategoryFilter}
-            priorityFilter={priorityFilter}
-            setPriorityFilter={setPriorityFilter}
-            archivedTaskCount={archivedTaskCount}
-            syncStatus={syncStatus}
-            handleLogout={handleLogout}
-            isAddingCategory={isAddingCategory}
-            setIsAddingCategory={setIsAddingCategory}
-            newCategoryName={newCategoryName}
-            setNewCategoryName={setNewCategoryName}
-            handleAddCategory={handleAddCategory}
-            handleDeleteCategory={handleDeleteCategory}
-            setIsSettingsOpen={setIsSettingsOpen}
-            setIsPanoramaOpen={setIsPanoramaOpen}
-            setIsSavedAnalysesOpen={setIsSavedAnalysesOpen}
-            onClose={() => setIsDrawerOpen(false)}
-          />
-        </div>
-    </div>
-  );
 
   return (
-    <div className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-200 min-h-screen font-sans transition-colors duration-300">
+    <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-800 transition-colors duration-300">
+      <div className={`fixed inset-0 z-30 bg-black/50 lg:hidden ${isSidebarOpen ? 'block' : 'hidden'}`} onClick={() => setIsSidebarOpen(false)}></div>
+      <aside className={`fixed top-0 left-0 h-full w-72 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg border-r border-gray-200 dark:border-gray-700/50 p-6 z-40 transform transition-transform lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <Sidebar
+          tasks={tasks}
+          categories={categories}
+          allTags={allTags}
+          mainView={mainView}
+          setMainView={setMainView}
+          categoryFilter={categoryFilter}
+          setCategoryFilter={setCategoryFilter}
+          priorityFilter={priorityFilter}
+          setPriorityFilter={setPriorityFilter}
+          tagFilter={tagFilter}
+          setTagFilter={setTagFilter}
+          archivedTaskCount={archivedTaskCount}
+          trashedTaskCount={trashedTaskCount}
+          syncStatus={syncStatus}
+          handleLogout={handleLogout}
+          isAddingCategory={isAddingCategory}
+          setIsAddingCategory={setIsAddingCategory}
+          newCategoryName={newCategoryName}
+          setNewCategoryName={setNewCategoryName}
+          handleAddCategory={handleAddCategory}
+          handleDeleteCategory={handleDeleteCategory}
+          setIsSettingsOpen={setIsSettingsOpen}
+          setIsPanoramaOpen={setIsPanoramaOpen}
+          setIsSavedAnalysesOpen={setIsSavedAnalysesOpen}
+          onClose={() => setIsSidebarOpen(false)}
+        />
+      </aside>
       
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="hidden lg:block w-80 min-w-[320px] p-6 h-screen sticky top-0">
-          <Sidebar
-            tasks={tasks}
-            categories={categories}
-            mainView={mainView}
-            setMainView={setMainView}
-            categoryFilter={categoryFilter}
-            setCategoryFilter={setCategoryFilter}
-            priorityFilter={priorityFilter}
-            setPriorityFilter={setPriorityFilter}
-            archivedTaskCount={archivedTaskCount}
-            syncStatus={syncStatus}
-            handleLogout={handleLogout}
-            isAddingCategory={isAddingCategory}
-            setIsAddingCategory={setIsAddingCategory}
-            newCategoryName={newCategoryName}
-            setNewCategoryName={setNewCategoryName}
-            handleAddCategory={handleAddCategory}
-            handleDeleteCategory={handleDeleteCategory}
-            setIsSettingsOpen={setIsSettingsOpen}
-            setIsPanoramaOpen={setIsPanoramaOpen}
-            setIsSavedAnalysesOpen={setIsSavedAnalysesOpen}
-          />
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-h-screen">
-          <header className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-              <div className="flex items-center gap-4">
-                  <button onClick={() => setIsDrawerOpen(true)} className="lg:hidden p-2 -ml-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                      <MenuIcon />
-                  </button>
-                  <div className="flex items-center gap-3 text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">
-                    {pageIcon}
-                    <h1>{pageTitle}</h1>
-                  </div>
-              </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="relative flex-grow sm:flex-grow-0" ref={searchScopeDropdownRef}>
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <SearchIcon className="text-gray-400" />
-                    </div>
-                     <input
-                        type="text"
-                        placeholder="Pesquisar tarefas..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-16 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                    <div className="absolute inset-y-0 right-0 pr-1 flex items-center">
-                        <button
-                          onClick={() => setIsSearchScopeDropdownOpen(prev => !prev)}
-                          className="px-2 py-1 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center gap-1"
-                        >
-                          {searchScopeOptions[searchScope]}
-                          <ChevronDownIcon className="h-4 w-4"/>
-                        </button>
-                    </div>
-                    {isSearchScopeDropdownOpen && (
-                        <div className="absolute top-full right-0 mt-1 w-32 bg-white dark:bg-gray-700 rounded-md shadow-lg border dark:border-gray-600 z-10">
-                            {Object.entries(searchScopeOptions).map(([key, label]) => (
-                                <button
-                                    key={key}
-                                    onClick={() => {
-                                        setSearchScope(key as SearchScope);
-                                        setIsSearchScopeDropdownOpen(false);
-                                    }}
-                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600"
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-                 <button 
-                    onClick={() => setIsFilterModalOpen(true)}
-                    className="p-2.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" 
-                    title="Filtros avançados"
-                 >
-                    <FilterIcon />
-                 </button>
-                 <div className="p-1 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 flex items-center">
+      <div className="flex-1 lg:pl-72 flex flex-col overflow-y-auto">
+        <header className="sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg z-20 p-4 border-b border-gray-200 dark:border-gray-700/50">
+          <div className="flex items-center justify-between gap-4">
+             <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-gray-600 dark:text-gray-300">
+                <MenuIcon />
+            </button>
+            <div className="relative flex-grow max-w-xl">
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
+              <input
+                type="text"
+                placeholder="Pesquisar tarefas..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-gray-100 dark:bg-gray-800 border border-transparent focus:border-teal-500 focus:ring-teal-500 rounded-lg py-2 pl-10 pr-4"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={() => setIsLiveConversationOpen(true)}
+                    className="p-2.5 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    title="Criar tarefa com IA"
+                >
+                    <MicrophoneIcon />
+                </button>
+                <div className="hidden sm:flex items-center gap-2">
                     <button
                         onClick={() => setLayoutMode('grid')}
-                        className={`p-1.5 rounded-md ${layoutMode === 'grid' ? 'text-teal-600 bg-gray-100 dark:bg-gray-700' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                        className={`p-2.5 rounded-lg transition-colors ${layoutMode === 'grid' ? 'bg-teal-500 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                         title="Visualização em Grade"
                     >
-                        <ViewGridIcon className="h-5 w-5"/>
+                        <ViewGridIcon />
                     </button>
                     <button
                         onClick={() => setLayoutMode('list')}
-                        className={`p-1.5 rounded-md ${layoutMode === 'list' ? 'text-teal-600 bg-gray-100 dark:bg-gray-700' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                        className={`p-2.5 rounded-lg transition-colors ${layoutMode === 'list' ? 'bg-teal-500 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                         title="Visualização em Lista"
                     >
-                        <ViewListIcon className="h-5 w-5"/>
+                        <ViewListIcon />
                     </button>
-                 </div>
-              </div>
-          </header>
+                </div>
+            </div>
+          </div>
+        </header>
 
-          {filteredTasks.length > 0 ? (
-            <div className={`${layoutMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6' : 'space-y-6 max-w-4xl mx-auto'}`}>
-              {filteredTasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  categories={categories}
-                  onUpdateTitle={handleUpdateTaskTitle}
-                  onDeleteTask={handleDeleteTask}
-                  onAddBlock={handleAddBlock}
-                  onAddAttachment={handleAddAttachment}
-                  onUpdateBlock={handleUpdateBlock}
-                  onDeleteBlock={handleDeleteBlock}
-                  onToggleSubItem={handleToggleSubItem}
-                  onToggleAllSubItems={handleToggleAllSubItems}
-                  onAddNestedSubItem={handleAddNestedSubItem}
-                  onUpdateDetails={handleUpdateTaskDetails}
-                  onToggleArchive={handleToggleArchiveTask}
-                  onMoveBlock={handleMoveBlock}
-                  onMoveTask={handleMoveTask}
-                  onSuggestSubItems={handleSuggestSubItems}
-                  draggedTaskId={draggedTaskId}
-                  onSetDraggedTaskId={setDraggedTaskId}
-                  isNew={task.id === newlyCreatedTaskId}
-                  recentlyDeleted={recentlyDeleted}
-                  onUndoDeleteBlock={handleUndoDeleteBlock}
-                />
-              ))}
+        <main className="flex-grow">
+          {mainView === 'trash' ? (
+            <div className="p-4 sm:p-6">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200 flex items-center gap-3">
+                        <TrashIcon className="h-7 w-7" /> Lixeira
+                    </h2>
+                    {filteredTasks.length > 0 && (
+                        <button 
+                            onClick={() => setIsConfirmingEmptyTrash(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white font-semibold rounded-md hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
+                        >
+                            <TrashIcon /> Esvaziar Lixeira
+                        </button>
+                    )}
+                </div>
+                {isLoading ? (
+                  <div className="text-center py-20"><SpinnerIcon /></div>
+                ) : filteredTasks.length === 0 ? (
+                    <div className="text-center py-20 text-gray-500 dark:text-gray-400">
+                        <TrashIcon className="h-16 w-16 mx-auto" />
+                        <p className="mt-4 text-lg font-semibold">A lixeira está vazia.</p>
+                        <p className="mt-1 text-sm">Itens excluídos aparecerão aqui.</p>
+                    </div>
+                ) : (
+                    <div className={layoutMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6' : 'space-y-6 max-w-4xl mx-auto'}>
+                        {filteredTasks.map(task => (
+                            <div key={task.id} className="relative group/trashitem">
+                                <div className="absolute inset-0 bg-gray-600/20 dark:bg-black/40 rounded-lg backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-4 opacity-0 group-hover/trashitem:opacity-100 transition-opacity duration-300">
+                                    <button
+                                        onClick={() => handleRestoreTask(task.id)}
+                                        className="flex items-center gap-2 px-6 py-3 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700 transition-transform hover:scale-105"
+                                    >
+                                        <RestoreIcon />
+                                        Restaurar
+                                    </button>
+                                    <button
+                                        onClick={() => handlePermanentlyDeleteTask(task.id)}
+                                        className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-transform hover:scale-105"
+                                    >
+                                        <TrashIcon />
+                                        Excluir para Sempre
+                                    </button>
+                                </div>
+                                <div className="transition-all duration-300 group-hover/trashitem:opacity-30 group-hover/trashitem:scale-95 pointer-events-none">
+                                    <TaskCard
+                                        task={task}
+                                        categories={categories}
+                                        onUpdateTitle={() => {}}
+                                        onDeleteTask={() => {}}
+                                        onAddBlock={() => {}}
+                                        onAddAttachment={() => {}}
+                                        onUpdateBlock={() => {}}
+                                        onDeleteBlock={() => {}}
+                                        onToggleSubItem={() => {}}
+                                        onToggleAllSubItems={() => {}}
+                                        onAddNestedSubItem={() => {}}
+                                        onUpdateDetails={() => {}}
+                                        onToggleArchive={() => {}}
+                                        onMoveBlock={() => {}}
+                                        onMoveTask={() => {}}
+                                        onSuggestSubItems={() => {}}
+                                        draggedTaskId={null}
+                                        onSetDraggedTaskId={() => {}}
+                                        recentlyDeleted={null}
+                                        onUndoDeleteBlock={() => {}}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
           ) : (
-             <div className="flex flex-col items-center justify-center h-full text-center py-20 text-gray-500 dark:text-gray-400">
-                <ExclamationTriangleIcon className="h-12 w-12 mx-auto" />
-                <h2 className="text-xl font-semibold mt-4">Nenhuma Tarefa Encontrada</h2>
-                <p className="mt-2">Tente ajustar seus filtros ou criar uma nova tarefa.</p>
-             </div>
+            <>
+                <div className="p-4 sm:p-6">
+                    {areFiltersActive && (
+                        <div className="mb-4 flex items-center gap-2 p-3 bg-teal-50 dark:bg-teal-900/30 rounded-lg text-teal-800 dark:text-teal-200">
+                            <FilterIcon />
+                            <span className="text-sm font-medium">Filtros ativos.</span>
+                            <button onClick={handleClearFilters} className="ml-auto text-sm font-semibold hover:underline">Limpar filtros</button>
+                        </div>
+                    )}
+                    {isLoading ? (
+                        <div className="text-center py-20"><SpinnerIcon /></div>
+                    ) : filteredTasks.length > 0 ? (
+                        <div className={layoutMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6' : 'space-y-6 max-w-4xl mx-auto'}>
+                            {filteredTasks.map((task, index) => (
+                                <TaskCard
+                                    key={task.id}
+                                    task={task}
+                                    categories={categories}
+                                    onUpdateTitle={handleUpdateTaskTitle}
+                                    onDeleteTask={handleDeleteTask}
+                                    onAddBlock={handleAddBlock}
+                                    onAddAttachment={handleAddAttachment}
+                                    onUpdateBlock={handleUpdateBlock}
+                                    onDeleteBlock={handleDeleteBlock}
+                                    onToggleSubItem={handleToggleSubItem}
+                                    onToggleAllSubItems={handleToggleAllSubItems}
+                                    onAddNestedSubItem={handleAddNestedSubItem}
+                                    onUpdateDetails={handleUpdateTaskDetails}
+                                    onToggleArchive={handleToggleArchiveTask}
+                                    onMoveBlock={handleMoveBlock}
+                                    onMoveTask={handleMoveTask}
+                                    onSuggestSubItems={handleSuggestSubItems}
+                                    draggedTaskId={draggedTaskId}
+                                    onSetDraggedTaskId={setDraggedTaskId}
+                                    isNew={index === 0 && task.title === 'Nova Tarefa'}
+                                    recentlyDeleted={recentlyDeletedBlock}
+                                    onUndoDeleteBlock={handleUndoDeleteBlock}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-20 text-gray-500 dark:text-gray-400">
+                            <ClipboardListIcon className="h-16 w-16 mx-auto" />
+                            <p className="mt-4 text-lg font-semibold">Nenhuma tarefa encontrada</p>
+                            <p className="mt-1 text-sm">Tente ajustar seus filtros ou crie uma nova tarefa.</p>
+                        </div>
+                    )}
+                </div>
+
+                <div className="fixed bottom-8 right-8 z-20">
+                    <button
+                        onClick={handleAddTask}
+                        className="bg-gradient-to-r from-teal-500 to-blue-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transform hover:scale-110 transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-teal-300 dark:focus:ring-teal-800"
+                    >
+                        <PlusIcon />
+                    </button>
+                </div>
+            </>
           )}
 
-          <div className="fixed bottom-8 right-8 z-30 flex flex-col items-center gap-3">
-             <button
-                onClick={() => setIsLiveConversationOpen(true)}
-                className="p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-full shadow-lg hover:scale-110 transition-transform transform"
-                title="Criar tarefa com IA (Voz)"
-              >
-                <MicrophoneIcon />
-              </button>
-              <button
-                onClick={handleAddTask}
-                className="p-5 bg-gradient-to-br from-teal-500 to-green-600 text-white rounded-full shadow-lg hover:scale-110 transition-transform transform"
-                title="Adicionar Nova Tarefa"
-              >
-                <PlusIcon />
-              </button>
-          </div>
+          <SettingsModal
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            onExport={handleExportData}
+            onImport={handleImportFileChange}
+            onReset={() => setIsConfirmingReset(true)}
+            theme={theme}
+            onThemeChange={setTheme}
+            notificationPermission={notificationPermission}
+            onRequestNotificationPermission={requestNotificationPermission}
+          />
+          <PanoramaModal isOpen={isPanoramaOpen} onClose={() => setIsPanoramaOpen(false)} tasks={tasks} onSaveAnalysis={handleSaveAnalysis} />
+          <SavedAnalysesModal isOpen={isSavedAnalysesOpen} onClose={() => setIsSavedAnalysesOpen(false)} analyses={savedAnalyses} onDelete={handleDeleteAnalysis} />
+          <LiveConversationModal isOpen={isLiveConversationOpen} onClose={() => setIsLiveConversationOpen(false)} onTasksCreated={handleLiveCreateTasks} />
+          <ImportConfirmationModal isOpen={isImportConfirmationOpen} onClose={() => setIsImportConfirmationOpen(false)} onConfirm={handleConfirmImport} fileData={importFileData} />
+
+          <ConfirmationDialog
+            isOpen={isConfirmingReset}
+            onClose={() => setIsConfirmingReset(false)}
+            onConfirm={handleResetApp}
+            title="Redefinir Aplicativo"
+            message="Tem certeza de que deseja excluir permanentemente todas as suas tarefas e análises? Esta ação não pode ser desfeita."
+            icon={<ExclamationTriangleIcon className="h-10 w-10 text-red-500" />}
+          />
+          <ConfirmationDialog
+            isOpen={isConfirmingEmptyTrash}
+            onClose={() => setIsConfirmingEmptyTrash(false)}
+            onConfirm={handleEmptyTrash}
+            title="Esvaziar Lixeira"
+            message="Tem certeza de que deseja excluir permanentemente todos os itens da lixeira? Esta ação não pode ser desfeita."
+            icon={<ExclamationTriangleIcon className="h-10 w-10 text-red-500" />}
+          />
         </main>
       </div>
-
-      <ConfirmationDialog
-        isOpen={!!taskToDeleteId}
-        onClose={handleCancelDelete}
-        onConfirm={handleConfirmDelete}
-        title="Confirmar Exclusão da Tarefa"
-        message={`Você tem certeza de que deseja excluir a tarefa "${tasks.find(t => t.id === taskToDeleteId)?.title}"? Esta ação não pode ser desfeita.`}
-        icon={<TrashIcon className="h-6 w-6 text-red-500" />}
-      />
-
-      <ConfirmationDialog
-        isOpen={!!categoryToDelete}
-        onClose={handleCancelDeleteCategory}
-        onConfirm={handleConfirmDeleteCategory}
-        title="Confirmar Exclusão da Categoria"
-        message={`Você tem certeza de que deseja excluir a categoria "${categoryToDelete}"? As tarefas nesta categoria não serão excluídas, mas ficarão sem categoria.`}
-        icon={<TagIcon className="h-6 w-6 text-red-500" />}
-      />
-      
-      <ConfirmationDialog
-        isOpen={showResetConfirmation}
-        onClose={() => setShowResetConfirmation(false)}
-        onConfirm={handleConfirmReset}
-        title="Confirmar Redefinição"
-        message="Você tem certeza de que deseja redefinir o aplicativo? Todos os seus dados locais (tarefas e análises) serão perdidos. Esta ação não pode ser desfeita."
-        icon={<ExclamationCircleIcon className="h-6 w-6 text-red-500" />}
-      />
-
-      <ConfirmationDialog
-        isOpen={!!analysisToDeleteId}
-        onClose={handleCancelDeleteAnalysis}
-        onConfirm={handleConfirmDeleteAnalysis}
-        title="Confirmar Exclusão da Análise"
-        message="Você tem certeza de que deseja excluir esta análise salva? Esta ação não pode ser desfeita."
-        icon={<TrashIcon className="h-6 w-6 text-red-500" />}
-      />
-
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onExport={handleExportData}
-        onImport={handleImportData}
-        onReset={handleResetData}
-        theme={theme}
-        onThemeChange={handleThemeChange}
-        notificationPermission={notificationPermission}
-        onRequestNotificationPermission={handleRequestNotificationPermission}
-      />
-      
-      <PanoramaModal
-        isOpen={isPanoramaOpen}
-        onClose={() => setIsPanoramaOpen(false)}
-        tasks={tasks}
-        onSaveAnalysis={handleSaveAnalysis}
-      />
-
-      <SavedAnalysesModal
-        isOpen={isSavedAnalysesOpen}
-        onClose={() => setIsSavedAnalysesOpen(false)}
-        analyses={savedAnalyses}
-        onDelete={handleDeleteAnalysis}
-      />
-
-      <LiveConversationModal
-        isOpen={isLiveConversationOpen}
-        onClose={() => setIsLiveConversationOpen(false)}
-        onTasksCreated={handleAITasksCreation}
-      />
-
-      <ImportConfirmationModal
-        isOpen={!!importFileData}
-        onClose={handleCancelImport}
-        onConfirm={handleConfirmImport}
-        fileData={importFileData}
-      />
-
-      {isFilterModalOpen && <FilterModal />}
-      <Drawer />
-
     </div>
   );
 };

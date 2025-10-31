@@ -1,5 +1,3 @@
-
-
 import React from 'react';
 import { TaskType, Priority, SyncStatus } from '../types';
 import Logo from './Logo';
@@ -24,7 +22,7 @@ import {
   ArrowLeftOnRectangleIcon,
 } from './Icons';
 
-type MainView = 'active' | 'today' | 'archived';
+type MainView = 'active' | 'today' | 'archived' | 'trash';
 
 const priorityOptions: Record<Priority | 'all', string> = {
     all: 'Todas as Prioridades',
@@ -72,13 +70,17 @@ const SyncStatusIndicator: React.FC<{ status: SyncStatus }> = ({ status }) => {
 interface SidebarProps {
   tasks: TaskType[];
   categories: string[];
+  allTags: string[];
   mainView: MainView;
   setMainView: (view: MainView) => void;
   categoryFilter: string;
   setCategoryFilter: (filter: string) => void;
   priorityFilter: Priority | 'all';
   setPriorityFilter: (filter: Priority | 'all') => void;
+  tagFilter: string;
+  setTagFilter: (filter: string) => void;
   archivedTaskCount: number;
+  trashedTaskCount: number;
   syncStatus: SyncStatus;
   handleLogout: () => void;
   isAddingCategory: boolean;
@@ -100,12 +102,16 @@ const Sidebar: React.FC<SidebarProps> = ({
   mainView,
   setMainView,
   archivedTaskCount,
+  trashedTaskCount,
   categoryFilter,
   setCategoryFilter,
   priorityFilter,
   setPriorityFilter,
+  tagFilter,
+  setTagFilter,
   tasks,
   categories,
+  allTags,
   handleDeleteCategory,
   isAddingCategory,
   setIsAddingCategory,
@@ -117,11 +123,12 @@ const Sidebar: React.FC<SidebarProps> = ({
   onClose,
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayTaskCount = tasks.filter(t => !t.archived && t.dueDate === todayStr).length;
+  const todayTaskCount = tasks.filter(t => !t.archived && !t.deletedAt && t.dueDate?.startsWith(todayStr)).length;
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-grow">
+      {/* Header */}
+      <div className="flex-shrink-0">
         <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
                 <Logo className="h-9 w-9" />
@@ -133,7 +140,10 @@ const Sidebar: React.FC<SidebarProps> = ({
             </button>
           )}
         </div>
+      </div>
 
+      {/* Scrollable Content */}
+      <div className="flex-grow overflow-y-auto -mr-2 pr-2">
         <div className="space-y-6">
           <div>
             <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
@@ -169,6 +179,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <span>Arquivadas</span>
                   </span>
                   {archivedTaskCount > 0 && <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{archivedTaskCount}</span>}
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => { setMainView('trash'); onClose?.(); }}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${mainView === 'trash' ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                >
+                  <span className="flex items-center gap-2">
+                    <TrashIcon />
+                    <span>Lixeira</span>
+                  </span>
+                  {trashedTaskCount > 0 && <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{trashedTaskCount}</span>}
                 </button>
               </li>
             </ul>
@@ -291,9 +313,41 @@ const Sidebar: React.FC<SidebarProps> = ({
               )}
             </ul>
           </div>
+
+          <div>
+            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <TagIcon />
+              <span>Tags</span>
+            </h3>
+            <ul className="space-y-1">
+              <li>
+                <button
+                  onClick={() => { setTagFilter('all'); onClose?.(); }}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium ${tagFilter === 'all' ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                >
+                  Todas as Tags
+                </button>
+              </li>
+              {allTags.map((tag) => (
+                <li key={tag}>
+                  <button
+                    onClick={() => { setTagFilter(tag); onClose?.(); }}
+                    className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${tagFilter === tag ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                  >
+                    <span className="truncate" title={tag}># {tag}</span>
+                    <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full ml-2 flex-shrink-0">
+                      {tasks.filter(t => t.tags?.includes(tag) && !t.archived).length}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
-      <div className="mt-auto flex-shrink-0 pt-4">
+      
+      {/* Footer */}
+      <div className="flex-shrink-0 pt-4">
         <SyncStatusIndicator status={syncStatus} />
         <div className="flex items-center gap-2 mt-2">
             <button

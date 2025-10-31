@@ -1,11 +1,9 @@
-
-
 import React, { useState, useRef, useEffect } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, Priority } from '../types';
 import SubItem from './SubItem';
 import TextBlock from './TextBlock';
 import AttachmentBlock from './AttachmentBlock';
-import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon, DotsVerticalIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, ClipboardListIcon, FlagIcon, TagIcon, DocumentTextIcon, ChevronDownIcon, SparklesIcon, SpinnerIcon, ClockIcon } from './Icons';
+import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon, DotsVerticalIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, ClipboardListIcon, FlagIcon, TagIcon, DocumentTextIcon, ChevronDownIcon, SparklesIcon, SpinnerIcon, ClockIcon, XCircleIcon } from './Icons';
 import ColorPalette from './ColorPalette';
 
 interface TaskCardProps {
@@ -20,7 +18,7 @@ interface TaskCardProps {
   onToggleSubItem: (taskId: string, subItemId: string) => void;
   onToggleAllSubItems: (taskId: string, completed: boolean) => void;
   onAddNestedSubItem: (taskId: string, parentId: string) => void;
-  onUpdateDetails: (id: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category' | 'color'>>) => void;
+  onUpdateDetails: (id: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category' | 'color' | 'tags'>>) => void;
   onToggleArchive: (id: string) => void;
   onMoveBlock: (taskId: string, sourceId: string, targetId: string | null, position: 'before' | 'after' | 'end') => void;
   onMoveTask: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
@@ -103,6 +101,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | null>(null);
   const [isCompact, setIsCompact] = useState(false);
   const [areDetailsVisible, setAreDetailsVisible] = useState(true);
+  const [tagInput, setTagInput] = useState('');
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
@@ -288,6 +287,28 @@ const TaskCard: React.FC<TaskCardProps> = ({
           onUpdateDetails(task.id, { dueDate: newDueDate });
       }
   };
+  
+  const handleAddTag = (tag: string) => {
+    const newTag = tag.trim().replace(/,/g, '');
+    if (newTag && !(task.tags || []).includes(newTag)) {
+        const newTags = [...(task.tags || []), newTag];
+        onUpdateDetails(task.id, { tags: newTags });
+    }
+    setTagInput('');
+  };
+
+  const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter' || e.key === ',') {
+          e.preventDefault();
+          handleAddTag(e.currentTarget.value);
+      }
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+      const newTags = (task.tags || []).filter(tag => tag !== tagToRemove);
+      onUpdateDetails(task.id, { tags: newTags });
+  };
+
 
   return (
     <div 
@@ -484,6 +505,29 @@ const TaskCard: React.FC<TaskCardProps> = ({
                         </div>
                       </div>
                       
+                       <div className="pt-3 -mx-5 px-5">
+                          <div className="flex items-center gap-2 flex-wrap text-sm text-gray-500 dark:text-gray-400">
+                              <label className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2 shrink-0"><TagIcon /> Tags:</label>
+                              {(task.tags || []).map(tag => (
+                                  <div key={tag} className="flex items-center gap-1 bg-gray-200 dark:bg-gray-700 rounded-full py-0.5 pl-2.5 pr-1 text-xs font-medium text-gray-700 dark:text-gray-300">
+                                      <span>{tag}</span>
+                                      <button onClick={() => handleRemoveTag(tag)} className="text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded-full focus:outline-none">
+                                          <XCircleIcon className="h-4 w-4" />
+                                      </button>
+                                  </div>
+                              ))}
+                              <input
+                                  type="text"
+                                  value={tagInput}
+                                  onChange={(e) => setTagInput(e.target.value)}
+                                  onKeyDown={handleTagInputKeyDown}
+                                  onBlur={(e) => { e.preventDefault(); handleAddTag(e.target.value); }}
+                                  placeholder="Adicionar tag..."
+                                  className="bg-transparent focus:outline-none w-24 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white text-sm"
+                              />
+                          </div>
+                      </div>
+
                       <div className={`w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-4 ${totalSubItems > 0 ? 'block' : 'hidden'}`}>
                         <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
                       </div>
