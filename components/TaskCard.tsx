@@ -3,7 +3,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, Priority } from '../types';
 import SubItem from './SubItem';
 import TextBlock from './TextBlock';
-import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon } from './Icons';
+import AttachmentBlock from './AttachmentBlock';
+import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon } from './Icons';
 import ColorPalette from './ColorPalette';
 
 interface TaskCardProps {
@@ -12,6 +13,7 @@ interface TaskCardProps {
   onUpdateTitle: (id: string, title: string) => void;
   onDeleteTask: (id: string) => void;
   onAddBlock: (taskId: string, type: 'subitem' | 'text') => void;
+  onAddAttachment: (taskId: string, file: File) => void;
   onUpdateBlock: (taskId: string, blockId: string, updates: Partial<ContentBlock>) => void;
   onDeleteBlock: (taskId: string, blockId: string) => void;
   onToggleSubItem: (taskId: string, subItemId: string) => void;
@@ -51,6 +53,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onUpdateTitle,
   onDeleteTask,
   onAddBlock,
+  onAddAttachment,
   onUpdateBlock,
   onDeleteBlock,
   onToggleSubItem,
@@ -67,7 +70,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const [categoryValue, setCategoryValue] = useState(task.category || '');
   const [isCategoryFocused, setIsCategoryFocused] = useState(false);
   const categoryContainerRef = useRef<HTMLDivElement>(null);
-
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
@@ -158,6 +161,17 @@ const TaskCard: React.FC<TaskCardProps> = ({
       setIsCategoryFocused(false);
       e.currentTarget.blur();
     }
+  };
+
+  const handleAddAttachmentClick = () => {
+    attachmentInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      onAddAttachment(task.id, e.target.files[0]);
+    }
+    if (e.target) e.target.value = '';
   };
   
   const filteredCategories = categories.filter(
@@ -300,6 +314,16 @@ const TaskCard: React.FC<TaskCardProps> = ({
               />
             );
           }
+          if (block.type === 'attachment') {
+            return (
+              <AttachmentBlock
+                key={block.id}
+                block={block}
+                onDelete={(_id) => onDeleteBlock(task.id, block.id)}
+                onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
+              />
+            );
+          }
           return null;
         })}
       </div>
@@ -310,16 +334,29 @@ const TaskCard: React.FC<TaskCardProps> = ({
           className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
         >
           <PlusIcon />
-          <span>Adicionar subitem</span>
+          <span>Subitem</span>
         </button>
          <button
           onClick={() => onAddBlock(task.id, 'text')}
           className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
         >
           <PlusIcon />
-          <span>Adicionar texto</span>
+          <span>Texto</span>
+        </button>
+        <button
+          onClick={handleAddAttachmentClick}
+          className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
+        >
+          <PaperClipIcon />
+          <span>Anexar</span>
         </button>
       </div>
+      <input
+        type="file"
+        ref={attachmentInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+      />
     </div>
   );
 };

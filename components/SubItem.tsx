@@ -81,8 +81,8 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
 
   return (
     <div style={{ paddingLeft: `${level * 28}px` }} className="relative">
-       {dragOverPosition === 'top' && <div className="absolute top-0 left-0 right-0 h-1.5 bg-teal-500/80 rounded-full shadow-[0_0_10px] shadow-teal-400/50 z-10"></div>}
-       {dragOverPosition === 'bottom' && <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-teal-500/80 rounded-full shadow-[0_0_10px] shadow-teal-400/50 z-10"></div>}
+       {dragOverPosition === 'top' && <div className="absolute top-0 left-0 right-0 h-2 bg-teal-500 rounded shadow-[0_0_12px_2px] shadow-teal-400/60 z-10"></div>}
+       {dragOverPosition === 'bottom' && <div className="absolute bottom-0 left-0 right-0 h-2 bg-teal-500 rounded shadow-[0_0_12px_2px] shadow-teal-400/60 z-10"></div>}
       <div 
         className="flex items-center space-x-3 group py-1.5"
         draggable

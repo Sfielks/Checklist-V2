@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority } from './types';
+import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock } from './types';
 import TaskCard from './components/TaskCard';
-import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, AppleIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon } from './components/Icons';
+import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, AppleIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon } from './components/Icons';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SettingsModal from './components/SettingsModal';
 
@@ -167,13 +167,13 @@ const filterContentTree = (content: ContentBlock[], targetId: string): [ContentB
   return [newContent, found];
 };
 
-const migrateSubItems = (items: any[]): ContentBlock[] => {
+const migrateContent = (items: any[]): ContentBlock[] => {
     return items.map(item => {
         if (item.type === 'subitem') {
             return {
                 ...item,
                 completed: item.completed || false,
-                children: item.children ? migrateSubItems(item.children) : []
+                children: item.children ? migrateContent(item.children) : []
             };
         }
         return item;
@@ -235,6 +235,8 @@ const SidebarContent: React.FC<{
   archivedTaskCount: number;
   categoryFilter: string;
   setCategoryFilter: (filter: string) => void;
+  priorityFilter: Priority | 'all';
+  setPriorityFilter: (filter: Priority | 'all') => void;
   tasks: TaskType[];
   categories: string[];
   handleDeleteCategory: (category: string) => void;
@@ -253,6 +255,8 @@ const SidebarContent: React.FC<{
   archivedTaskCount,
   categoryFilter,
   setCategoryFilter,
+  priorityFilter,
+  setPriorityFilter,
   tasks,
   categories,
   handleDeleteCategory,
@@ -299,6 +303,25 @@ const SidebarContent: React.FC<{
                   {archivedTaskCount > 0 && <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{archivedTaskCount}</span>}
                 </button>
               </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <BellIcon />
+              <span>Prioridade</span>
+            </h3>
+            <ul className="space-y-1">
+              {Object.entries(priorityOptions).map(([key, label]) => (
+                <li key={key}>
+                  <button
+                    onClick={() => { setPriorityFilter(key as Priority | 'all'); onClose?.(); }}
+                    className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium ${priorityFilter === key ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                  >
+                    {label}
+                  </button>
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -413,7 +436,7 @@ const App: React.FC = () => {
         return parsedTasks.map((task: any) => ({ 
             ...task, 
             archived: task.archived || false,
-            content: migrateSubItems(task.content || [])
+            content: migrateContent(task.content || [])
         }));
       }
       return initialTasks;
@@ -438,8 +461,15 @@ const App: React.FC = () => {
   });
 
   const [theme, setTheme] = useState<Theme>(() => {
-    const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
-    return savedTheme || 'dark';
+    try {
+      const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (savedTheme === 'light' || savedTheme === 'dark') {
+        return savedTheme;
+      }
+    } catch (error) {
+      console.error("Could not load theme from localStorage", error);
+    }
+    return 'light';
   });
 
   const [showArchived, setShowArchived] = useState(false);
@@ -523,7 +553,7 @@ const App: React.FC = () => {
     try {
         const cloudTasks = await cloudStorage.loadTasks(userId);
         if (cloudTasks) {
-            setTasks(cloudTasks.map((task: any) => ({ ...task, content: migrateSubItems(task.content || []) })));
+            setTasks(cloudTasks.map((task: any) => ({ ...task, content: migrateContent(task.content || []) })));
             const cloudCategories = Array.from(new Set(cloudTasks.map((t: TaskType) => t.category).filter((c?: string): c is string => !!c)));
             setCategories(cloudCategories.sort());
         } else {
@@ -632,6 +662,34 @@ const App: React.FC = () => {
     }));
   };
 
+  const handleAddAttachment = (taskId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (typeof e.target?.result === 'string') {
+        const newAttachment: AttachmentBlock = {
+          id: Date.now().toString(),
+          type: 'attachment',
+          fileName: file.name,
+          fileType: file.type,
+          dataUrl: e.target.result,
+          size: file.size,
+        };
+
+        setTasks(currentTasks => currentTasks.map(task => {
+          if (task.id === taskId) {
+            return { ...task, content: [...task.content, newAttachment] };
+          }
+          return task;
+        }));
+      }
+    };
+    reader.onerror = (error) => {
+      console.error("Error reading file:", error);
+      alert("Não foi possível ler o arquivo.");
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleUpdateBlock = (taskId: string, blockId: string, updates: Partial<ContentBlock>) => {
     setTasks(tasks.map(task => {
       if (task.id === taskId) {
@@ -674,7 +732,7 @@ const App: React.FC = () => {
             let found = false;
             
             const newContent = content.map(block => {
-                if (found || block.type === 'text') return block;
+                if (found || block.type !== 'subitem') return block;
 
                 if (block.id === subItemId) {
                     found = true;
@@ -831,7 +889,7 @@ const App: React.FC = () => {
             const migratedTasks = importedTasks.map(task => ({
                 ...task,
                 archived: task.archived || false,
-                content: migrateSubItems(task.content || [])
+                content: migrateContent(task.content || [])
             }));
             setTasks(migratedTasks);
             const importedCategories = Array.from(new Set(migratedTasks.map(t => t.category).filter(Boolean)));
@@ -1001,6 +1059,8 @@ const App: React.FC = () => {
     archivedTaskCount,
     categoryFilter,
     setCategoryFilter,
+    priorityFilter,
+    setPriorityFilter,
     tasks,
     categories,
     handleDeleteCategory,
@@ -1130,6 +1190,7 @@ const App: React.FC = () => {
                 onUpdateTitle={handleUpdateTaskTitle}
                 onDeleteTask={handleDeleteTask}
                 onAddBlock={handleAddBlock}
+                onAddAttachment={handleAddAttachment}
                 onUpdateBlock={handleUpdateBlock}
                 onDeleteBlock={handleDeleteBlock}
                 onToggleSubItem={handleToggleSubItem}

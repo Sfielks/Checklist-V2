@@ -14,7 +14,16 @@ export interface TextBlock {
   text: string;
 }
 
-export type ContentBlock = SubItemBlock | TextBlock;
+export interface AttachmentBlock {
+  id: string;
+  type: 'attachment';
+  fileName: string;
+  fileType: string;
+  dataUrl: string;
+  size: number;
+}
+
+export type ContentBlock = SubItemBlock | TextBlock | AttachmentBlock;
 
 export interface TaskType {
   id:string;
