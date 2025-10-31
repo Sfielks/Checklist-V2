@@ -251,7 +251,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
   return (
     <div 
-      className={`relative bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col gap-4 border border-gray-200 dark:border-gray-700/50 hover:border-teal-500/30 transition-all duration-300 ease-in-out border-t-8 ${isBeingDragged ? 'scale-105 shadow-2xl z-20 !opacity-100' : (draggedTaskId ? 'hover:!opacity-100' : '')} ${isNew ? 'animate-fade-in-scale' : ''}`}
+      className={`relative bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col border border-gray-200 dark:border-gray-700/50 hover:border-teal-500/30 transition-all duration-300 ease-in-out border-t-8 ${isBeingDragged ? 'scale-105 shadow-2xl z-20 !opacity-100' : (draggedTaskId ? 'hover:!opacity-100' : '')} ${isNew ? 'animate-fade-in-scale' : ''}`}
       style={{ borderTopColor: task.color || 'transparent' }}
       draggable="true"
       onDragStart={handleTaskDragStart}
@@ -356,136 +356,138 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </div>
       </div>
       
-      <div className={`transition-all duration-300 ease-in-out overflow-hidden flex flex-col gap-4 ${isCompact ? 'max-h-0 opacity-0' : 'max-h-[1000px] opacity-100'}`}>
-        <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-6 gap-y-3 text-sm text-gray-500 dark:text-gray-400 border-b border-t border-gray-200 dark:border-gray-700/50 py-3 -mx-5 px-5">
-          <div className="flex items-center gap-2">
-              <label htmlFor={`priority-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">Prioridade:</label>
-              <select
-                  id={`priority-${task.id}`}
-                  value={task.priority || 'none'}
-                  onChange={(e) => onUpdateDetails(task.id, { priority: e.target.value as Priority })}
-                  className={`bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 text-gray-900 dark:text-white ${priorityConfig[task.priority || 'none'].ringColor}`}
-              >
-                  {Object.entries(priorityConfig).map(([key, { label }]) => (
-                      <option key={key} value={key} className="bg-white dark:bg-gray-800 font-medium">{label}</option>
-                  ))}
-              </select>
-          </div>
-
-          <div className="flex items-center gap-2">
-               <label htmlFor={`dueDate-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><CalendarIcon /> Vencimento:</label>
-               <input
-                  id={`dueDate-${task.id}`}
-                  type="date"
-                  value={task.dueDate || ''}
-                  onChange={(e) => onUpdateDetails(task.id, { dueDate: e.target.value })}
-                  className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-700 dark:text-gray-300"
-                  style={{ colorScheme: 'dark' }}
-              />
-          </div>
-          
-           <div ref={categoryContainerRef} className="relative flex items-center gap-2">
-              <label htmlFor={`category-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">#</label>
-              <input
-                  id={`category-${task.id}`}
-                  type="text"
-                  placeholder="Categoria"
-                  value={categoryValue}
-                  onChange={(e) => setCategoryValue(e.target.value)}
-                  onFocus={() => setIsCategoryFocused(true)}
-                  onKeyDown={handleCategoryKeyDown}
-                  className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 w-32 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white"
-              />
-              {isCategoryFocused && filteredCategories.length > 0 && (
-                  <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-gray-800 rounded-md shadow-lg border dark:border-gray-700 z-10 max-h-40 overflow-y-auto">
-                      {filteredCategories.map(cat => (
-                          <div
-                              key={cat}
-                              className="px-3 py-2 text-sm cursor-pointer hover:bg-teal-100 dark:hover:bg-teal-900/50"
-                              onMouseDown={(e) => {
-                                  e.preventDefault(); // prevent input blur before click
-                                  handleSelectCategory(cat);
-                              }}
-                          >
-                              {cat}
-                          </div>
+      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isCompact ? 'max-h-0 opacity-0 mt-0' : 'max-h-[1000px] opacity-100 mt-4'}`}>
+        <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-6 gap-y-3 text-sm text-gray-500 dark:text-gray-400 border-b border-t border-gray-200 dark:border-gray-700/50 py-3 -mx-5 px-5">
+              <div className="flex items-center gap-2">
+                  <label htmlFor={`priority-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">Prioridade:</label>
+                  <select
+                      id={`priority-${task.id}`}
+                      value={task.priority || 'none'}
+                      onChange={(e) => onUpdateDetails(task.id, { priority: e.target.value as Priority })}
+                      className={`bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 text-gray-900 dark:text-white ${priorityConfig[task.priority || 'none'].ringColor}`}
+                  >
+                      {Object.entries(priorityConfig).map(([key, { label }]) => (
+                          <option key={key} value={key} className="bg-white dark:bg-gray-800 font-medium">{label}</option>
                       ))}
-                  </div>
-              )}
-          </div>
-        </div>
-        
-        <div className={`w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 ${totalSubItems > 0 ? 'block' : 'hidden'}`}>
-          <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
-        </div>
+                  </select>
+              </div>
 
-        <div 
-          className="flex flex-col min-h-[2rem]"
-          data-dropzone="true"
-          onDragOver={handleContentDragOver}
-          onDrop={handleContentDrop}
-         >
-          {task.content.map((block) => {
-             if (block.type === 'subitem') {
-              return (
-                <SubItem
-                  key={block.id}
-                  subItem={block}
-                  onToggle={(subItemId) => onToggleSubItem(task.id, subItemId)}
-                  onUpdate={(_id, text) => onUpdateBlock(task.id, block.id, { text })}
-                  onDelete={(_id) => onDeleteBlock(task.id, block.id)}
-                  onAddNestedSubItem={(parentId) => onAddNestedSubItem(task.id, parentId)}
-                  onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
-                />
-              );
-            }
-            if (block.type === 'text') {
-              return (
-                <TextBlock
-                  key={block.id}
-                  block={block}
-                  onUpdate={(_id, text) => onUpdateBlock(task.id, block.id, { text })}
-                  onDelete={(_id) => onDeleteBlock(task.id, block.id)}
-                  onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
-                />
-              );
-            }
-            if (block.type === 'attachment') {
-              return (
-                <AttachmentBlock
-                  key={block.id}
-                  block={block}
-                  onDelete={(_id) => onDeleteBlock(task.id, block.id)}
-                  onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
-                />
-              );
-            }
-            return null;
-          })}
-        </div>
-        
-        <div className="mt-auto pt-4 flex items-center justify-stretch gap-2 text-sm">
-          <button
-            onClick={() => onAddBlock(task.id, 'subitem')}
-            className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
-          >
-            <PlusIcon />
-            <span>Subitem</span>
-          </button>
-           <button
-            onClick={() => onAddBlock(task.id, 'text')}
-            className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
-          >
-            <PlusIcon />
-            <span>Texto</span>
-          </button>
-          <button
-            onClick={handleAddAttachmentClick}
-            className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
-          >
-            <PaperClipIcon />
-            <span>Anexar</span>
-          </button>
+              <div className="flex items-center gap-2">
+                   <label htmlFor={`dueDate-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><CalendarIcon /> Vencimento:</label>
+                   <input
+                      id={`dueDate-${task.id}`}
+                      type="date"
+                      value={task.dueDate || ''}
+                      onChange={(e) => onUpdateDetails(task.id, { dueDate: e.target.value })}
+                      className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-700 dark:text-gray-300"
+                      style={{ colorScheme: 'dark' }}
+                  />
+              </div>
+              
+               <div ref={categoryContainerRef} className="relative flex items-center gap-2">
+                  <label htmlFor={`category-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">#</label>
+                  <input
+                      id={`category-${task.id}`}
+                      type="text"
+                      placeholder="Categoria"
+                      value={categoryValue}
+                      onChange={(e) => setCategoryValue(e.target.value)}
+                      onFocus={() => setIsCategoryFocused(true)}
+                      onKeyDown={handleCategoryKeyDown}
+                      className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 w-32 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white"
+                  />
+                  {isCategoryFocused && filteredCategories.length > 0 && (
+                      <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-gray-800 rounded-md shadow-lg border dark:border-gray-700 z-10 max-h-40 overflow-y-auto">
+                          {filteredCategories.map(cat => (
+                              <div
+                                  key={cat}
+                                  className="px-3 py-2 text-sm cursor-pointer hover:bg-teal-100 dark:hover:bg-teal-900/50"
+                                  onMouseDown={(e) => {
+                                      e.preventDefault(); // prevent input blur before click
+                                      handleSelectCategory(cat);
+                                  }}
+                              >
+                                  {cat}
+                              </div>
+                          ))}
+                      </div>
+                  )}
+              </div>
+            </div>
+            
+            <div className={`w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 ${totalSubItems > 0 ? 'block' : 'hidden'}`}>
+              <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+            </div>
+
+            <div 
+              className="flex flex-col min-h-[2rem]"
+              data-dropzone="true"
+              onDragOver={handleContentDragOver}
+              onDrop={handleContentDrop}
+             >
+              {task.content.map((block) => {
+                 if (block.type === 'subitem') {
+                  return (
+                    <SubItem
+                      key={block.id}
+                      subItem={block}
+                      onToggle={(subItemId) => onToggleSubItem(task.id, subItemId)}
+                      onUpdate={(_id, text) => onUpdateBlock(task.id, block.id, { text })}
+                      onDelete={(_id) => onDeleteBlock(task.id, block.id)}
+                      onAddNestedSubItem={(parentId) => onAddNestedSubItem(task.id, parentId)}
+                      onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
+                    />
+                  );
+                }
+                if (block.type === 'text') {
+                  return (
+                    <TextBlock
+                      key={block.id}
+                      block={block}
+                      onUpdate={(_id, text) => onUpdateBlock(task.id, block.id, { text })}
+                      onDelete={(_id) => onDeleteBlock(task.id, block.id)}
+                      onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
+                    />
+                  );
+                }
+                if (block.type === 'attachment') {
+                  return (
+                    <AttachmentBlock
+                      key={block.id}
+                      block={block}
+                      onDelete={(_id) => onDeleteBlock(task.id, block.id)}
+                      onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
+                    />
+                  );
+                }
+                return null;
+              })}
+            </div>
+            
+            <div className="mt-auto pt-4 flex items-center justify-stretch gap-2 text-sm">
+              <button
+                onClick={() => onAddBlock(task.id, 'subitem')}
+                className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
+              >
+                <PlusIcon />
+                <span>Subitem</span>
+              </button>
+               <button
+                onClick={() => onAddBlock(task.id, 'text')}
+                className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
+              >
+                <PlusIcon />
+                <span>Texto</span>
+              </button>
+              <button
+                onClick={handleAddAttachmentClick}
+                className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
+              >
+                <PaperClipIcon />
+                <span>Anexar</span>
+              </button>
+            </div>
         </div>
       </div>
       <input

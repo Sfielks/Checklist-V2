@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import { marked } from 'marked';
 import { TextBlock as TextBlockType } from '../types';
 import { TrashIcon, GripVerticalIcon } from './Icons';
 import EditingToolbar from './EditingToolbar';
@@ -10,25 +11,6 @@ interface TextBlockProps {
   onDelete: (id: string) => void;
   onMoveBlock: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
 }
-
-const parseInlineMarkdown = (text: string): string => {
-  if (!text || text.trim() === '') {
-    return '<span class="text-gray-500 dark:text-gray-400 italic">Bloco de texto vazio</span>';
-  }
-  
-  // Basic escaping for security
-  let processedText = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-    
-  // Process **Bold** first
-  processedText = processedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  // Then process *Italic*
-  processedText = processedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  
-  return processedText;
-};
 
 const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMoveBlock }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -74,6 +56,58 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
     }, 0);
   };
 
+  const handleListClick = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const value = textarea.value;
+
+    let lineStart = start;
+    while (lineStart > 0 && value[lineStart - 1] !== '\n') {
+        lineStart--;
+    }
+
+    let lineEnd = end;
+    while (lineEnd < value.length && value[lineEnd] !== '\n') {
+        lineEnd++;
+    }
+
+    const selectedLinesText = value.substring(lineStart, lineEnd);
+    const lines = selectedLinesText.split('\n');
+    
+    const isAlreadyList = lines.every(line => line.trim().startsWith('- ') || line.trim() === '');
+    let newLinesText = '';
+    let charChange = 0;
+
+    if (isAlreadyList) {
+        newLinesText = lines.map(line => {
+            if (line.trim().startsWith('- ')) {
+                charChange -= 2;
+                return line.replace(/-\s/, '');
+            }
+            return line;
+        }).join('\n');
+    } else {
+        newLinesText = lines.map(line => {
+            if (line.trim() !== '') {
+                charChange += 2;
+                return `- ${line}`;
+            }
+            return line;
+        }).join('\n');
+    }
+
+    const newText = value.substring(0, lineStart) + newLinesText + value.substring(lineEnd);
+    setText(newText);
+    
+    setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(end + charChange, end + charChange);
+    }, 0);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -82,6 +116,10 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
         e.preventDefault();
         handleBoldClick();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+        e.preventDefault();
+        handleListClick();
     }
   };
   
@@ -141,13 +179,13 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
               className="w-full bg-gray-100/50 dark:bg-gray-700/50 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none overflow-hidden text-gray-900 dark:text-gray-200 -m-2"
               rows={1}
             />
-            <EditingToolbar onBold={handleBoldClick} />
+            <EditingToolbar onBold={handleBoldClick} onList={handleListClick} />
           </>
         ) : (
           <div 
             onClick={() => setIsEditing(true)} 
-            className="whitespace-pre-wrap cursor-pointer flex-grow p-2 -m-2 rounded-md hover:bg-gray-200/50 dark:hover:bg-gray-700/50 w-full text-gray-900 dark:text-gray-200"
-            dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(block.text) }}
+            className="prose-styles dark:prose-styles max-w-none cursor-pointer p-2 -m-2 rounded-md hover:bg-gray-200/50 dark:hover:bg-gray-700/50 w-full"
+            dangerouslySetInnerHTML={{ __html: block.text.trim() ? marked(block.text) as string : '<p><span class="text-gray-500 dark:text-gray-400 italic">Bloco de texto vazio</span></p>' }}
           />
         )}
       </div>

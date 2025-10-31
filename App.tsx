@@ -3,6 +3,7 @@
 
 
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock, SavedAnalysis, SyncStatus } from './types';
 import TaskCard from './components/TaskCard';
@@ -1294,7 +1295,7 @@ const App: React.FC = () => {
           <div className="px-4 sm:px-6 lg:px-0 pb-24 lg:pb-0">
             <div className={layoutMode === 'grid'
               ? `grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 ${draggedTaskId ? '[&>*]:opacity-50' : ''}`
-              : `flex flex-col gap-4 ${draggedTaskId ? '[&>*]:opacity-50' : ''}`
+              : `mx-auto w-full max-w-4xl flex flex-col gap-4 ${draggedTaskId ? '[&>*]:opacity-50' : ''}`
             }>
               {filteredTasks.map((task) => (
                 <TaskCard
