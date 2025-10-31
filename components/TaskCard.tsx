@@ -1,12 +1,10 @@
 
-
-
 import React, { useState, useRef, useEffect } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, Priority } from '../types';
 import SubItem from './SubItem';
 import TextBlock from './TextBlock';
 import AttachmentBlock from './AttachmentBlock';
-import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon } from './Icons';
+import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon, DotsVerticalIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon } from './Icons';
 import ColorPalette from './ColorPalette';
 
 interface TaskCardProps {
@@ -27,6 +25,7 @@ interface TaskCardProps {
   onMoveTask: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
   draggedTaskId: string | null;
   onSetDraggedTaskId: (id: string | null) => void;
+  isNew?: boolean;
 }
 
 const priorityConfig: Record<Priority, { label: string; ringColor: string; dotColor: string }> = {
@@ -71,17 +70,20 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onMoveTask,
   draggedTaskId,
   onSetDraggedTaskId,
+  isNew = false,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState(task.title);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const [showColorPalette, setShowColorPalette] = useState(false);
-  const paletteRef = useRef<HTMLDivElement>(null);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [categoryValue, setCategoryValue] = useState(task.category || '');
   const [isCategoryFocused, setIsCategoryFocused] = useState(false);
   const categoryContainerRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | null>(null);
+  const [isCompact, setIsCompact] = useState(false);
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
@@ -91,8 +93,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (paletteRef.current && !paletteRef.current.contains(event.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setShowColorPalette(false);
+        setShowActionsMenu(false);
       }
       if (categoryContainerRef.current && !categoryContainerRef.current.contains(event.target as Node)) {
         if (isCategoryFocused) {
@@ -194,6 +197,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const handleSelectColor = (color: string | undefined) => {
     onUpdateDetails(task.id, { color });
     setShowColorPalette(false);
+    setShowActionsMenu(false);
   };
   
   const handleSelectCategory = (category: string) => {
@@ -234,9 +238,20 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const isBeingDragged = draggedTaskId === task.id;
   const showDropIndicator = draggedTaskId && !isBeingDragged;
 
+  const formatDate = (isoString: string | undefined) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return '';
+    return `Criada em ${date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })}`;
+  };
+
   return (
     <div 
-      className={`relative bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col gap-4 border border-gray-200 dark:border-gray-700/50 hover:border-teal-500/30 transition-all duration-300 ease-in-out border-t-8 cursor-grab ${isBeingDragged ? 'scale-105 shadow-2xl z-20 !opacity-100' : (draggedTaskId ? 'hover:!opacity-100' : '')}`}
+      className={`relative bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col gap-4 border border-gray-200 dark:border-gray-700/50 hover:border-teal-500/30 transition-all duration-300 ease-in-out border-t-8 ${isBeingDragged ? 'scale-105 shadow-2xl z-20 !opacity-100' : (draggedTaskId ? 'hover:!opacity-100' : '')} ${isNew ? 'animate-fade-in-scale' : ''}`}
       style={{ borderTopColor: task.color || 'transparent' }}
       draggable="true"
       onDragStart={handleTaskDragStart}
@@ -291,158 +306,187 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     </h2>
                 </div>
             )}
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+              {formatDate(task.createdAt)}
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2 flex-shrink-0 text-gray-500">
-            <div className="relative" ref={paletteRef}>
-                <button 
-                  onClick={() => setShowColorPalette(!showColorPalette)} 
-                  className="hover:text-teal-500 dark:hover:text-teal-400" 
-                  title="Alterar Cor"
+        <div className="relative flex-shrink-0 text-gray-500 flex items-center" ref={menuRef}>
+          <button
+            onClick={() => setIsCompact(!isCompact)}
+            className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+            title={isCompact ? "Expandir tarefa" : "Visualização compacta"}
+          >
+            {isCompact ? <ArrowsPointingOutIcon /> : <ArrowsPointingInIcon />}
+          </button>
+          <button onClick={() => setShowActionsMenu(!showActionsMenu)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" title="Mais opções">
+            <DotsVerticalIcon />
+          </button>
+
+          {showActionsMenu && (
+            <div className="absolute top-full right-0 mt-2 z-20 bg-white dark:bg-gray-700 p-2 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-600 w-48">
+              <div className="relative">
+                <button
+                  onClick={() => setShowColorPalette(!showColorPalette)}
+                  className="w-full text-left flex items-center gap-3 px-3 py-2 text-sm rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200"
                 >
                   <PaletteIcon />
+                  <span>Alterar Cor</span>
                 </button>
                 {showColorPalette && <ColorPalette onSelectColor={handleSelectColor} />}
-            </div>
-            <button onClick={() => onToggleArchive(task.id)} className="hover:text-teal-500 dark:hover:text-teal-400" title={task.archived ? "Desarquivar Tarefa" : "Arquivar Tarefa"}>
+              </div>
+              <button
+                onClick={() => { onToggleArchive(task.id); setShowActionsMenu(false); }}
+                className="w-full text-left flex items-center gap-3 px-3 py-2 text-sm rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200"
+              >
                 {task.archived ? <UnarchiveIcon /> : <ArchiveIcon />}
-            </button>
-            <button onClick={() => onDeleteTask(task.id)} className="hover:text-red-500 dark:hover:text-red-400" title="Excluir Tarefa">
+                <span>{task.archived ? "Desarquivar" : "Arquivar"}</span>
+              </button>
+              <div className="my-1 h-px bg-gray-200 dark:bg-gray-600"></div>
+              <button
+                onClick={() => { onDeleteTask(task.id); setShowActionsMenu(false); }}
+                className="w-full text-left flex items-center gap-3 px-3 py-2 text-sm rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400"
+              >
                 <TrashIcon />
-            </button>
+                <span>Excluir Tarefa</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
+      
+      <div className={`transition-all duration-300 ease-in-out overflow-hidden flex flex-col gap-4 ${isCompact ? 'max-h-0 opacity-0' : 'max-h-[1000px] opacity-100'}`}>
+        <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-6 gap-y-3 text-sm text-gray-500 dark:text-gray-400 border-b border-t border-gray-200 dark:border-gray-700/50 py-3 -mx-5 px-5">
+          <div className="flex items-center gap-2">
+              <label htmlFor={`priority-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">Prioridade:</label>
+              <select
+                  id={`priority-${task.id}`}
+                  value={task.priority || 'none'}
+                  onChange={(e) => onUpdateDetails(task.id, { priority: e.target.value as Priority })}
+                  className={`bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 text-gray-900 dark:text-white ${priorityConfig[task.priority || 'none'].ringColor}`}
+              >
+                  {Object.entries(priorityConfig).map(([key, { label }]) => (
+                      <option key={key} value={key} className="bg-white dark:bg-gray-800 font-medium">{label}</option>
+                  ))}
+              </select>
+          </div>
 
-      <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-6 gap-y-3 text-sm text-gray-500 dark:text-gray-400 border-b border-t border-gray-200 dark:border-gray-700/50 py-3 -mx-5 px-5">
-        <div className="flex items-center gap-2">
-            <label htmlFor={`priority-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">Prioridade:</label>
-            <select
-                id={`priority-${task.id}`}
-                value={task.priority || 'none'}
-                onChange={(e) => onUpdateDetails(task.id, { priority: e.target.value as Priority })}
-                className={`bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 text-gray-900 dark:text-white ${priorityConfig[task.priority || 'none'].ringColor}`}
-            >
-                {Object.entries(priorityConfig).map(([key, { label }]) => (
-                    <option key={key} value={key} className="bg-white dark:bg-gray-800 font-medium">{label}</option>
-                ))}
-            </select>
-        </div>
-
-        <div className="flex items-center gap-2">
-             <label htmlFor={`dueDate-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><CalendarIcon /> Vencimento:</label>
-             <input
-                id={`dueDate-${task.id}`}
-                type="date"
-                value={task.dueDate || ''}
-                onChange={(e) => onUpdateDetails(task.id, { dueDate: e.target.value })}
-                className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-700 dark:text-gray-300"
-                style={{ colorScheme: 'dark' }}
-            />
+          <div className="flex items-center gap-2">
+               <label htmlFor={`dueDate-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><CalendarIcon /> Vencimento:</label>
+               <input
+                  id={`dueDate-${task.id}`}
+                  type="date"
+                  value={task.dueDate || ''}
+                  onChange={(e) => onUpdateDetails(task.id, { dueDate: e.target.value })}
+                  className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-700 dark:text-gray-300"
+                  style={{ colorScheme: 'dark' }}
+              />
+          </div>
+          
+           <div ref={categoryContainerRef} className="relative flex items-center gap-2">
+              <label htmlFor={`category-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">#</label>
+              <input
+                  id={`category-${task.id}`}
+                  type="text"
+                  placeholder="Categoria"
+                  value={categoryValue}
+                  onChange={(e) => setCategoryValue(e.target.value)}
+                  onFocus={() => setIsCategoryFocused(true)}
+                  onKeyDown={handleCategoryKeyDown}
+                  className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 w-32 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white"
+              />
+              {isCategoryFocused && filteredCategories.length > 0 && (
+                  <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-gray-800 rounded-md shadow-lg border dark:border-gray-700 z-10 max-h-40 overflow-y-auto">
+                      {filteredCategories.map(cat => (
+                          <div
+                              key={cat}
+                              className="px-3 py-2 text-sm cursor-pointer hover:bg-teal-100 dark:hover:bg-teal-900/50"
+                              onMouseDown={(e) => {
+                                  e.preventDefault(); // prevent input blur before click
+                                  handleSelectCategory(cat);
+                              }}
+                          >
+                              {cat}
+                          </div>
+                      ))}
+                  </div>
+              )}
+          </div>
         </div>
         
-         <div ref={categoryContainerRef} className="relative flex items-center gap-2">
-            <label htmlFor={`category-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">#</label>
-            <input
-                id={`category-${task.id}`}
-                type="text"
-                placeholder="Categoria"
-                value={categoryValue}
-                onChange={(e) => setCategoryValue(e.target.value)}
-                onFocus={() => setIsCategoryFocused(true)}
-                onKeyDown={handleCategoryKeyDown}
-                className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 w-32 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white"
-            />
-            {isCategoryFocused && filteredCategories.length > 0 && (
-                <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-gray-800 rounded-md shadow-lg border dark:border-gray-700 z-10 max-h-40 overflow-y-auto">
-                    {filteredCategories.map(cat => (
-                        <div
-                            key={cat}
-                            className="px-3 py-2 text-sm cursor-pointer hover:bg-teal-100 dark:hover:bg-teal-900/50"
-                            onMouseDown={(e) => {
-                                e.preventDefault(); // prevent input blur before click
-                                handleSelectCategory(cat);
-                            }}
-                        >
-                            {cat}
-                        </div>
-                    ))}
-                </div>
-            )}
+        <div className={`w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 ${totalSubItems > 0 ? 'block' : 'hidden'}`}>
+          <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
         </div>
-      </div>
-      
-      <div className={`w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 ${totalSubItems > 0 ? 'block' : 'hidden'}`}>
-        <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
-      </div>
 
-      <div 
-        className="flex flex-col min-h-[2rem]"
-        data-dropzone="true"
-        onDragOver={handleContentDragOver}
-        onDrop={handleContentDrop}
-       >
-        {task.content.map((block) => {
-           if (block.type === 'subitem') {
-            return (
-              <SubItem
-                key={block.id}
-                subItem={block}
-                onToggle={(subItemId) => onToggleSubItem(task.id, subItemId)}
-                onUpdate={(_id, text) => onUpdateBlock(task.id, block.id, { text })}
-                onDelete={(_id) => onDeleteBlock(task.id, block.id)}
-                onAddNestedSubItem={(parentId) => onAddNestedSubItem(task.id, parentId)}
-                onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
-              />
-            );
-          }
-          if (block.type === 'text') {
-            return (
-              <TextBlock
-                key={block.id}
-                block={block}
-                onUpdate={(_id, text) => onUpdateBlock(task.id, block.id, { text })}
-                onDelete={(_id) => onDeleteBlock(task.id, block.id)}
-                onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
-              />
-            );
-          }
-          if (block.type === 'attachment') {
-            return (
-              <AttachmentBlock
-                key={block.id}
-                block={block}
-                onDelete={(_id) => onDeleteBlock(task.id, block.id)}
-                onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
-              />
-            );
-          }
-          return null;
-        })}
-      </div>
-      
-      <div className="mt-auto pt-4 flex items-center justify-stretch gap-2 text-sm">
-        <button
-          onClick={() => onAddBlock(task.id, 'subitem')}
-          className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
-        >
-          <PlusIcon />
-          <span>Subitem</span>
-        </button>
-         <button
-          onClick={() => onAddBlock(task.id, 'text')}
-          className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
-        >
-          <PlusIcon />
-          <span>Texto</span>
-        </button>
-        <button
-          onClick={handleAddAttachmentClick}
-          className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
-        >
-          <PaperClipIcon />
-          <span>Anexar</span>
-        </button>
+        <div 
+          className="flex flex-col min-h-[2rem]"
+          data-dropzone="true"
+          onDragOver={handleContentDragOver}
+          onDrop={handleContentDrop}
+         >
+          {task.content.map((block) => {
+             if (block.type === 'subitem') {
+              return (
+                <SubItem
+                  key={block.id}
+                  subItem={block}
+                  onToggle={(subItemId) => onToggleSubItem(task.id, subItemId)}
+                  onUpdate={(_id, text) => onUpdateBlock(task.id, block.id, { text })}
+                  onDelete={(_id) => onDeleteBlock(task.id, block.id)}
+                  onAddNestedSubItem={(parentId) => onAddNestedSubItem(task.id, parentId)}
+                  onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
+                />
+              );
+            }
+            if (block.type === 'text') {
+              return (
+                <TextBlock
+                  key={block.id}
+                  block={block}
+                  onUpdate={(_id, text) => onUpdateBlock(task.id, block.id, { text })}
+                  onDelete={(_id) => onDeleteBlock(task.id, block.id)}
+                  onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
+                />
+              );
+            }
+            if (block.type === 'attachment') {
+              return (
+                <AttachmentBlock
+                  key={block.id}
+                  block={block}
+                  onDelete={(_id) => onDeleteBlock(task.id, block.id)}
+                  onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
+                />
+              );
+            }
+            return null;
+          })}
+        </div>
+        
+        <div className="mt-auto pt-4 flex items-center justify-stretch gap-2 text-sm">
+          <button
+            onClick={() => onAddBlock(task.id, 'subitem')}
+            className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
+          >
+            <PlusIcon />
+            <span>Subitem</span>
+          </button>
+           <button
+            onClick={() => onAddBlock(task.id, 'text')}
+            className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
+          >
+            <PlusIcon />
+            <span>Texto</span>
+          </button>
+          <button
+            onClick={handleAddAttachmentClick}
+            className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
+          >
+            <PaperClipIcon />
+            <span>Anexar</span>
+          </button>
+        </div>
       </div>
       <input
         type="file"

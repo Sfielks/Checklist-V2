@@ -247,7 +247,8 @@ const LiveConversationModal: React.FC<LiveConversationModalProps> = ({ isOpen, o
     return () => {
         stopConversation();
     };
-  }, [isOpen]); // only dependent on isOpen
+  // FIX: Added dependencies to useEffect to prevent stale closures.
+  }, [isOpen, startConversation, stopConversation]);
 
   const handleClose = () => {
     stopConversation();

@@ -85,6 +85,7 @@ const PanoramaModal: React.FC<PanoramaModalProps> = ({ isOpen, onClose, tasks, o
         ${JSON.stringify(simplifiedTasks, null, 2)}
       `;
 
+      // FIX: Updated `generateContent` call to use object parameters and a non-deprecated model.
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-pro',
         contents: prompt,

@@ -1,9 +1,12 @@
 
 
+
+
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock, SavedAnalysis, SyncStatus } from './types';
 import TaskCard from './components/TaskCard';
-import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon, SparklesIcon, BookmarkIcon, MicrophoneIcon } from './components/Icons';
+import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon, SparklesIcon, BookmarkIcon, MicrophoneIcon, SearchIcon, ViewGridIcon, ViewListIcon } from './components/Icons';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SettingsModal from './components/SettingsModal';
 import PanoramaModal from './components/PanoramaModal';
@@ -26,6 +29,7 @@ const initialTasks: TaskType[] = [
     category: 'Acadêmico',
     archived: false,
     color: '#581c1c',
+    createdAt: '2024-08-10T10:00:00.000Z',
   },
   {
     id: '2',
@@ -40,6 +44,7 @@ const initialTasks: TaskType[] = [
     dueDate: '',
     category: 'Acadêmico',
     archived: false,
+    createdAt: '2024-08-11T11:00:00.000Z',
   },
     {
     id: '3',
@@ -50,6 +55,7 @@ const initialTasks: TaskType[] = [
     priority: 'low',
     category: 'Pesquisa',
     archived: false,
+    createdAt: '2024-08-12T12:00:00.000Z',
   },
 ];
 
@@ -57,10 +63,12 @@ const LOCAL_STORAGE_KEY = 'checklist-app-tasks-guest';
 const ANALYSES_STORAGE_KEY = 'checklist-app-analyses';
 const CLOUD_STORAGE_KEY_PREFIX = 'checklist-app-cloud-';
 const THEME_STORAGE_KEY = 'checklist-app-theme';
+const LAYOUT_STORAGE_KEY = 'checklist-app-layout';
 
 type Theme = 'light' | 'dark';
 type View = 'home' | 'checklist';
 type User = { id: string; name: string };
+type LayoutMode = 'grid' | 'list';
 
 
 // Mock Cloud Storage API
@@ -236,6 +244,9 @@ const App: React.FC = () => {
     'Notification' in window ? Notification.permission : 'denied'
   );
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [newlyCreatedTaskId, setNewlyCreatedTaskId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
 
   const [tasks, setTasks] = useState<TaskType[]>(() => {
     try {
@@ -245,7 +256,8 @@ const App: React.FC = () => {
         return parsedTasks.map((task: any) => ({ 
             ...task, 
             archived: task.archived || false,
-            content: migrateContent(task.content || [])
+            content: migrateContent(task.content || []),
+            createdAt: task.createdAt || new Date().toISOString(),
         }));
       }
       return initialTasks;
@@ -279,20 +291,31 @@ const App: React.FC = () => {
     }
   });
 
-  const [theme, setTheme] = useState<Theme>(() => {
+  const getInitialTheme = (): Theme => {
     try {
-      const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-      if (savedTheme === 'light' || savedTheme === 'dark') {
-        return savedTheme;
-      }
+        const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+        if (savedTheme === 'light' || savedTheme === 'dark') {
+            return savedTheme;
+        }
     } catch (error) {
-      console.error("Could not load theme from localStorage", error);
+        console.error("Could not load theme from localStorage", error);
     }
-    // If no theme is saved, use the system preference
     if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
+        return 'dark';
     }
     return 'light';
+  };
+
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
+    try {
+        const savedLayout = window.localStorage.getItem(LAYOUT_STORAGE_KEY);
+        return (savedLayout === 'grid' || savedLayout === 'list') ? savedLayout : 'grid';
+    } catch (error) {
+        console.error("Could not load layout mode from localStorage", error);
+        return 'grid';
+    }
   });
 
   const [showArchived, setShowArchived] = useState(false);
@@ -307,6 +330,14 @@ const App: React.FC = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
+  
+  useEffect(() => {
+    try {
+        window.localStorage.setItem(LAYOUT_STORAGE_KEY, layoutMode);
+    } catch (error) {
+        console.error("Could not save layout mode to localStorage", error);
+    }
+  }, [layoutMode]);
 
   // Effect for listening to system theme changes
   useEffect(() => {
@@ -357,6 +388,16 @@ const App: React.FC = () => {
 
     return () => clearTimeout(handler);
   }, [tasks, user]);
+
+  useEffect(() => {
+    if (newlyCreatedTaskId) {
+      const timer = setTimeout(() => {
+        setNewlyCreatedTaskId(null);
+      }, 500); // Animation is 200ms, giving it extra time
+      return () => clearTimeout(timer);
+    }
+  }, [newlyCreatedTaskId]);
+
 
   useEffect(() => {
     try {
@@ -437,16 +478,19 @@ const App: React.FC = () => {
   };
 
   const handleAddTask = () => {
+    const newTaskId = Date.now().toString();
     const newTask: TaskType = {
-      id: Date.now().toString(),
+      id: newTaskId,
       title: 'Nova Tarefa',
       content: [],
       priority: 'none',
       dueDate: '',
       category: categoryFilter !== 'all' ? categoryFilter : '',
       archived: false,
+      createdAt: new Date().toISOString(),
     };
     setTasks([newTask, ...tasks]);
+    setNewlyCreatedTaskId(newTaskId);
   };
 
   const handleDeleteTask = (taskId: string) => {
@@ -784,7 +828,8 @@ const App: React.FC = () => {
             const migratedTasks = importedTasks.map(task => ({
                 ...task,
                 archived: task.archived || false,
-                content: migrateContent(task.content || [])
+                content: migrateContent(task.content || []),
+                createdAt: task.createdAt || new Date().toISOString(),
             }));
             setTasks(migratedTasks);
             const importedCategories = Array.from(new Set(migratedTasks.map(t => t.category).filter(Boolean)));
@@ -908,9 +953,13 @@ const App: React.FC = () => {
         dueDate: '',
         category: categoryFilter !== 'all' ? categoryFilter : '',
         archived: false,
+        createdAt: new Date().toISOString(),
       };
     });
 
+    if (newTasks.length > 0) {
+      setNewlyCreatedTaskId(newTasks[0].id);
+    }
     setTasks(prevTasks => [...newTasks, ...prevTasks]);
     setIsLiveConversationOpen(false); // Close modal after creation
   };
@@ -945,8 +994,35 @@ const App: React.FC = () => {
       
       return false;
     };
+
+    const searchLower = searchQuery.toLowerCase().trim();
+    if (!searchLower) {
+      return isArchivedMatch && isPriorityMatch && isCategoryMatch && isStatusMatch();
+    }
+
+    const checkContent = (content: ContentBlock[]): boolean => {
+        for (const block of content) {
+            if (block.type === 'text' && block.text.toLowerCase().includes(searchLower)) {
+                return true;
+            }
+            if (block.type === 'subitem') {
+                if (block.text.toLowerCase().includes(searchLower)) {
+                    return true;
+                }
+                if (block.children && checkContent(block.children)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    const isSearchMatch =
+        task.title.toLowerCase().includes(searchLower) ||
+        (task.category && task.category.toLowerCase().includes(searchLower)) ||
+        checkContent(task.content);
     
-    return isArchivedMatch && isPriorityMatch && isCategoryMatch && isStatusMatch();
+    return isArchivedMatch && isPriorityMatch && isCategoryMatch && isStatusMatch() && isSearchMatch;
   });
 
   const archivedTaskCount = tasks.filter(t => t.archived).length;
@@ -1148,6 +1224,22 @@ const App: React.FC = () => {
                 </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="hidden sm:flex items-center gap-1 p-1 bg-gray-200 dark:bg-gray-700 rounded-lg">
+                    <button
+                        onClick={() => setLayoutMode('grid')}
+                        className={`p-1.5 rounded-md transition-colors ${layoutMode === 'grid' ? 'bg-white dark:bg-gray-800 text-teal-600 shadow' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'}`}
+                        title="Visualização em Grade"
+                    >
+                        <ViewGridIcon className="h-5 w-5" />
+                    </button>
+                    <button
+                        onClick={() => setLayoutMode('list')}
+                        className={`p-1.5 rounded-md transition-colors ${layoutMode === 'list' ? 'bg-white dark:bg-gray-800 text-teal-600 shadow' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'}`}
+                        title="Visualização em Lista"
+                    >
+                        <ViewListIcon className="h-5 w-5" />
+                    </button>
+                </div>
                 <button
                     onClick={() => setIsFilterModalOpen(true)}
                     className="flex items-center justify-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-sm"
@@ -1176,8 +1268,34 @@ const App: React.FC = () => {
             </div>
           </header>
 
+          <div className="px-4 sm:px-6 lg:px-0 mb-6">
+            <div className="relative">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <SearchIcon className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar tarefas por título, conteúdo ou categoria..."
+                  className="block w-full rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800 py-2.5 pl-10 pr-10 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50 sm:text-sm"
+              />
+              {searchQuery && (
+                  <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3"
+                  >
+                      <XCircleIcon className="h-5 w-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" />
+                  </button>
+              )}
+            </div>
+          </div>
+
           <div className="px-4 sm:px-6 lg:px-0 pb-24 lg:pb-0">
-            <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 ${draggedTaskId ? '[&>*]:opacity-50' : ''}`}>
+            <div className={layoutMode === 'grid'
+              ? `grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 ${draggedTaskId ? '[&>*]:opacity-50' : ''}`
+              : `flex flex-col gap-4 ${draggedTaskId ? '[&>*]:opacity-50' : ''}`
+            }>
               {filteredTasks.map((task) => (
                 <TaskCard
                   key={task.id}
@@ -1198,17 +1316,24 @@ const App: React.FC = () => {
                   onMoveTask={handleMoveTask}
                   draggedTaskId={draggedTaskId}
                   onSetDraggedTaskId={setDraggedTaskId}
+                  isNew={task.id === newlyCreatedTaskId}
                 />
               ))}
             </div>
 
             {filteredTasks.length === 0 && (
               <div className="text-center py-20">
-                <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300">Tudo limpo por aqui!</h3>
+                <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300">
+                  {searchQuery ? 'Nenhum Resultado Encontrado' : 'Tudo limpo por aqui!'}
+                </h3>
                 <p className="text-gray-500 dark:text-gray-400 mt-2">
-                  {showArchived ? 'Você não tem tarefas arquivadas.' : 'Crie uma nova tarefa para começar.'}
+                  {searchQuery
+                    ? 'Tente ajustar sua busca ou limpar os filtros.'
+                    : showArchived
+                    ? 'Você não tem tarefas arquivadas.'
+                    : 'Crie uma nova tarefa para começar.'}
                 </p>
-                {!showArchived && (
+                {!showArchived && !searchQuery && (
                   <button
                       onClick={handleAddTask}
                       className="mt-6 flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold px-5 py-2.5 rounded-lg hover:bg-teal-700 transition-transform transform hover:scale-105 shadow-lg mx-auto"

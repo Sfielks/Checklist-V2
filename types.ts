@@ -35,6 +35,7 @@ export interface TaskType {
   category?: string;
   archived: boolean;
   color?: string;
+  createdAt: string;
 }
 
 export interface SavedAnalysis {
