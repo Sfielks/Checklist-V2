@@ -154,7 +154,7 @@ const HomeScreen = ({ onAppleLogin, onGuestLogin }: { onAppleLogin: () => void; 
   </div>
 );
 
-const App: React.FC = () => {
+const App: React.FC<{ initialTasks?: TaskType[] }> = ({ initialTasks: initialTasksProp }) => {
   const [view, setView] = useState<'home' | 'checklist'>('home');
   const [user, setUser] = useState<{ name: string } | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -163,20 +163,22 @@ const App: React.FC = () => {
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
 
   const [tasks, setTasks] = useState<TaskType[]>(() => {
+    if (initialTasksProp) {
+      return initialTasksProp;
+    }
     try {
       const savedTasks = window.localStorage.getItem(LOCAL_STORAGE_KEY);
       if (savedTasks) {
         const parsedTasks = JSON.parse(savedTasks);
-        return parsedTasks.map((task: any) => ({ 
-            ...task, 
-            archived: task.archived || false,
-            content: migrateSubItems(task.content || [])
+        return parsedTasks.map((task: any) => ({
+          ...task,
+          archived: task.archived || false,
+          content: migrateSubItems(task.content || []),
         }));
       }
       return initialTasks;
-    } catch (error)
-     {
-      console.error("Could not load tasks from localStorage", error);
+    } catch (error) {
+      console.error('Could not load tasks from localStorage', error);
       return initialTasks;
     }
   });
@@ -340,36 +342,57 @@ const App: React.FC = () => {
   const handleToggleSubItem = (taskId: string, subItemId: string) => {
     setTasks(tasks.map(task => {
       if (task.id === taskId) {
-        const toggleAndUpdate = (content: ContentBlock[]): [ContentBlock[], boolean] => {
-            let wasUnchecked = false;
-            let found = false;
-            
-            const newContent = content.map(block => {
-                if (found || block.type === 'text') return block;
+        type ToggleUpdateResult = 'unchecked' | 'checked' | null;
 
+        const toggleAndUpdate = (content: ContentBlock[]): [ContentBlock[], ToggleUpdateResult] => {
+            let updateResult: ToggleUpdateResult = null;
+
+            const newContent = content.map(block => {
+                if (updateResult !== null || block.type === 'text') return block;
+
+                // Base case: Found the item to toggle.
                 if (block.id === subItemId) {
-                    found = true;
                     const newCompleted = !block.completed;
-                    if (!newCompleted) wasUnchecked = true;
-                    
-                    const newChildren = block.children.map(function markAllChildren(child): SubItemBlock {
-                        return { ...child, completed: newCompleted, children: child.children.map(markAllChildren) };
+                    updateResult = newCompleted ? 'checked' : 'unchecked';
+
+                    const markAllChildren = (child: SubItemBlock): SubItemBlock => ({
+                        ...child,
+                        completed: newCompleted,
+                        children: child.children.map(markAllChildren)
                     });
+                    const newChildren = (block.type === 'subitem' && block.children) ? block.children.map(markAllChildren) : [];
+
                     return { ...block, completed: newCompleted, children: newChildren };
                 }
 
-                if (block.children.length > 0) {
-                    const [newChildren, childWasUnchecked] = toggleAndUpdate(block.children);
-                    if (childWasUnchecked) {
-                        wasUnchecked = true;
-                        return { ...block, children: newChildren as SubItemBlock[], completed: false };
+                // Recursive step: Search in children.
+                if (block.type === 'subitem' && block.children.length > 0) {
+                    const [newChildren, childUpdateResult] = toggleAndUpdate(block.children);
+
+                    if (childUpdateResult !== null) {
+                        // An update happened in a descendant. Propagate the result.
+                        updateResult = childUpdateResult;
+
+                        if (childUpdateResult === 'unchecked') {
+                            // If a child was unchecked, this parent must be unchecked.
+                            return { ...block, children: newChildren as SubItemBlock[], completed: false };
+                        }
+
+                        // If a child was checked, check if all siblings are now complete.
+                        if (childUpdateResult === 'checked') {
+                            const allSiblingsCompleted = (newChildren as SubItemBlock[])
+                                .filter(c => c.type === 'subitem')
+                                .every(c => c.completed);
+                            return { ...block, children: newChildren as SubItemBlock[], completed: allSiblingsCompleted };
+                        }
                     }
+                    // No update in children, just return the block with potentially updated children array
                     return { ...block, children: newChildren as SubItemBlock[] };
                 }
                 return block;
             });
 
-            return [newContent, wasUnchecked];
+            return [newContent, updateResult];
         };
         
         const [finalContent] = toggleAndUpdate(task.content);
