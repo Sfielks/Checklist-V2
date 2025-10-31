@@ -169,7 +169,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
       </div>
       
       {totalSubItems > 0 && (
-        <div className="w-full bg-gray-700 rounded-full h-1.5">
+        <div role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100" className="w-full bg-gray-700 rounded-full h-1.5">
           <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
         </div>
       )}
