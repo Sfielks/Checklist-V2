@@ -5,7 +5,7 @@ import { TaskType, ContentBlock, SubItemBlock, Priority } from '../types';
 import SubItem from './SubItem';
 import TextBlock from './TextBlock';
 import AttachmentBlock from './AttachmentBlock';
-import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon, DotsVerticalIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, ClipboardListIcon, FlagIcon, TagIcon, DocumentTextIcon } from './Icons';
+import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon, DotsVerticalIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, ClipboardListIcon, FlagIcon, TagIcon, DocumentTextIcon, ChevronDownIcon } from './Icons';
 import ColorPalette from './ColorPalette';
 
 interface TaskCardProps {
@@ -100,6 +100,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | null>(null);
   const [isCompact, setIsCompact] = useState(false);
+  const [areDetailsVisible, setAreDetailsVisible] = useState(true);
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
@@ -377,68 +378,83 @@ const TaskCard: React.FC<TaskCardProps> = ({
       
       <div className={`relative transition-all duration-300 ease-in-out overflow-hidden ${isCompact ? 'max-h-48 mt-4' : 'max-h-[1000px] opacity-100 mt-4'}`}>
         <div className="flex flex-col gap-4">
-            <div className={`flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-6 gap-y-3 text-sm text-gray-500 dark:text-gray-400 border-b border-t border-gray-200 dark:border-gray-700/50 py-3 -mx-5 px-5 ${isCompact ? 'hidden' : ''}`}>
-              <div className="flex items-center gap-2">
-                  <label htmlFor={`priority-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><FlagIcon /> Prioridade:</label>
-                  <select
-                      id={`priority-${task.id}`}
-                      value={task.priority || 'none'}
-                      onChange={(e) => onUpdateDetails(task.id, { priority: e.target.value as Priority })}
-                      className={`bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 text-gray-900 dark:text-white ${priorityConfig[task.priority || 'none'].ringColor}`}
-                  >
-                      {Object.entries(priorityConfig).map(([key, { label }]) => (
-                          <option key={key} value={key} className="bg-white dark:bg-gray-800 font-medium">{label}</option>
-                      ))}
-                  </select>
-              </div>
+            <div className={isCompact ? 'hidden' : ''}>
+              <button
+                  onClick={() => setAreDetailsVisible(v => !v)}
+                  className="w-full flex justify-between items-center py-2 -mx-5 px-5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors rounded-md"
+                  aria-expanded={areDetailsVisible}
+                  aria-controls={`details-${task.id}`}
+              >
+                  <span>Detalhes e Progresso</span>
+                  <ChevronDownIcon className={`h-5 w-5 transition-transform duration-300 ${areDetailsVisible ? 'rotate-180' : ''}`} />
+              </button>
+              <div id={`details-${task.id}`} className={`overflow-hidden transition-all duration-500 ease-in-out ${areDetailsVisible ? 'max-h-96' : 'max-h-0'}`}>
+                  <div className="pt-2 pb-4">
+                      <div className={`flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-6 gap-y-3 text-sm text-gray-500 dark:text-gray-400 border-b border-t border-gray-200 dark:border-gray-700/50 py-3 -mx-5 px-5`}>
+                        <div className="flex items-center gap-2">
+                            <label htmlFor={`priority-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><FlagIcon /> Prioridade:</label>
+                            <select
+                                id={`priority-${task.id}`}
+                                value={task.priority || 'none'}
+                                onChange={(e) => onUpdateDetails(task.id, { priority: e.target.value as Priority })}
+                                className={`bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 text-gray-900 dark:text-white ${priorityConfig[task.priority || 'none'].ringColor}`}
+                            >
+                                {Object.entries(priorityConfig).map(([key, { label }]) => (
+                                    <option key={key} value={key} className="bg-white dark:bg-gray-800 font-medium">{label}</option>
+                                ))}
+                            </select>
+                        </div>
 
-              <div className="flex items-center gap-2">
-                   <label htmlFor={`dueDate-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><CalendarIcon /> Vencimento:</label>
-                   <input
-                      id={`dueDate-${task.id}`}
-                      type="date"
-                      value={task.dueDate || ''}
-                      onChange={(e) => onUpdateDetails(task.id, { dueDate: e.target.value })}
-                      className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-700 dark:text-gray-300"
-                      style={{ colorScheme: 'dark' }}
-                  />
-              </div>
-              
-               <div ref={categoryContainerRef} className="relative flex items-center gap-2">
-                  <label htmlFor={`category-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300"><TagIcon /></label>
-                  <input
-                      id={`category-${task.id}`}
-                      type="text"
-                      placeholder="Categoria"
-                      value={categoryValue}
-                      onChange={(e) => setCategoryValue(e.target.value)}
-                      onFocus={() => setIsCategoryFocused(true)}
-                      onKeyDown={handleCategoryKeyDown}
-                      className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 w-32 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white"
-                  />
-                  {isCategoryFocused && filteredCategories.length > 0 && (
-                      <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-gray-800 rounded-md shadow-lg border dark:border-gray-700 z-10 max-h-40 overflow-y-auto">
-                          {filteredCategories.map(cat => (
-                              <div
-                                  key={cat}
-                                  className="px-3 py-2 text-sm cursor-pointer hover:bg-teal-100 dark:hover:bg-teal-900/50"
-                                  onMouseDown={(e) => {
-                                      e.preventDefault(); // prevent input blur before click
-                                      handleSelectCategory(cat);
-                                  }}
-                              >
-                                  {cat}
-                              </div>
-                          ))}
+                        <div className="flex items-center gap-2">
+                            <label htmlFor={`dueDate-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><CalendarIcon /> Vencimento:</label>
+                            <input
+                                id={`dueDate-${task.id}`}
+                                type="date"
+                                value={task.dueDate || ''}
+                                onChange={(e) => onUpdateDetails(task.id, { dueDate: e.target.value })}
+                                className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-700 dark:text-gray-300"
+                                style={{ colorScheme: 'dark' }}
+                            />
+                        </div>
+                        
+                        <div ref={categoryContainerRef} className="relative flex items-center gap-2">
+                            <label htmlFor={`category-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300"><TagIcon /></label>
+                            <input
+                                id={`category-${task.id}`}
+                                type="text"
+                                placeholder="Categoria"
+                                value={categoryValue}
+                                onChange={(e) => setCategoryValue(e.target.value)}
+                                onFocus={() => setIsCategoryFocused(true)}
+                                onKeyDown={handleCategoryKeyDown}
+                                className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 w-32 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white"
+                            />
+                            {isCategoryFocused && filteredCategories.length > 0 && (
+                                <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-gray-800 rounded-md shadow-lg border dark:border-gray-700 z-10 max-h-40 overflow-y-auto">
+                                    {filteredCategories.map(cat => (
+                                        <div
+                                            key={cat}
+                                            className="px-3 py-2 text-sm cursor-pointer hover:bg-teal-100 dark:hover:bg-teal-900/50"
+                                            onMouseDown={(e) => {
+                                                e.preventDefault(); // prevent input blur before click
+                                                handleSelectCategory(cat);
+                                            }}
+                                        >
+                                            {cat}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                       </div>
-                  )}
+                      
+                      <div className={`w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-4 ${totalSubItems > 0 ? 'block' : 'hidden'}`}>
+                        <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                      </div>
+                  </div>
               </div>
             </div>
             
-            <div className={`w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 ${totalSubItems > 0 ? 'block' : 'hidden'} ${isCompact ? 'hidden' : ''}`}>
-              <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
-            </div>
-
             <div 
               className="flex flex-col min-h-[2rem]"
               data-dropzone="true"
