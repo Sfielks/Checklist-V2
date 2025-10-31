@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock } from './types';
 import TaskCard from './components/TaskCard';
-import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, AppleIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon } from './components/Icons';
+import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon } from './components/Icons';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SettingsModal from './components/SettingsModal';
 
@@ -197,35 +197,31 @@ const statusOptions: Record<'all' | 'completed' | 'in-progress', string> = {
 };
 
 
-const HomeScreen = ({ onAppleLogin, onGuestLogin }: { onAppleLogin: () => void; onGuestLogin: () => void; }) => (
-  <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white flex flex-col items-center justify-center p-4 text-center transition-colors duration-300">
-    <div className="max-w-2xl">
-      <h1 className="text-5xl sm:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500">
-        Checklist Avançado
-      </h1>
-      <p className="text-gray-500 dark:text-gray-400 mt-4 text-lg sm:text-xl">
-        A sua ferramenta definitiva para organizar tarefas complexas, projetos e ideias. Crie checklists detalhados com subtarefas, notas, prioridades e muito mais.
-      </p>
-       <p className="text-teal-500 dark:text-teal-400 mt-6 text-lg font-semibold">
-        Faça login para salvar e sincronizar suas tarefas na nuvem!
-      </p>
-      <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4">
-        <button
-          onClick={onAppleLogin}
-          className="w-full sm:w-auto flex items-center justify-center gap-3 bg-black text-white font-semibold py-3 px-8 rounded-lg border border-gray-600 hover:bg-gray-800 transition-all duration-300 transform hover:scale-105 text-lg"
-        >
-          <AppleIcon />
-          <span>Entrar com a Apple</span>
-        </button>
-      </div>
-       <button
-          onClick={onGuestLogin}
-          className="mt-6 text-gray-500 dark:text-gray-400 hover:text-teal-500 dark:hover:text-teal-300 transition-colors"
-        >
-          Continuar como convidado
-        </button>
+const HomeScreen = ({ onGuestLogin }: { onGuestLogin: () => void; }) => (
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white flex flex-col items-center justify-center p-4 text-center transition-colors duration-300 overflow-hidden relative">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-200 dark:text-gray-800/70">
+            <ClipboardListIcon className="h-[40rem] w-[40rem] opacity-30" />
+        </div>
+        <div className="max-w-2xl z-10 flex flex-col items-center">
+            <h1 className="text-5xl sm:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500 pb-2">
+                Checklist Inteligente
+            </h1>
+            <p className="text-gray-600 dark:text-gray-300 mt-4 text-lg sm:text-xl">
+                Organize suas ideias, projetos e tarefas diárias com facilidade e estilo.
+            </p>
+            <div className="mt-12">
+                <button
+                    onClick={onGuestLogin}
+                    className="w-full sm:w-auto flex items-center justify-center gap-3 bg-teal-600 text-white font-bold py-4 px-10 rounded-lg hover:bg-teal-700 transition-all duration-300 transform hover:scale-105 text-xl shadow-lg hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-teal-500/50"
+                >
+                    <span>Começar Agora</span>
+                </button>
+            </div>
+            <p className="mt-8 text-sm text-gray-500 dark:text-gray-400">
+                Seus dados são salvos automaticamente no seu dispositivo.
+            </p>
+        </div>
     </div>
-  </div>
 );
 
 const SidebarContent: React.FC<{
@@ -565,13 +561,6 @@ const App: React.FC = () => {
         setSyncStatus('error');
         alert("Não foi possível carregar os dados da nuvem. Verifique sua conexão e tente novamente.");
     }
-  };
-
-  const handleAppleLogin = () => {
-    const mockUser = { id: 'apple-user-123', name: 'Usuário Apple' };
-    setUser(mockUser);
-    loadAndSyncTasks(mockUser.id);
-    setView('checklist');
   };
 
   const handleGuestLogin = () => {
@@ -997,7 +986,7 @@ const App: React.FC = () => {
   const pageTitle = showArchived ? 'Tarefas Arquivadas' : categoryFilter !== 'all' ? categoryFilter : 'Suas Tarefas';
 
   if (view === 'home') {
-    return <HomeScreen onAppleLogin={handleAppleLogin} onGuestLogin={handleGuestLogin} />;
+    return <HomeScreen onGuestLogin={handleGuestLogin} />;
   }
   
   const FilterModal = () => (

@@ -1,7 +1,7 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { TextBlock as TextBlockType } from '../types';
 import { TrashIcon, GripVerticalIcon } from './Icons';
+import EditingToolbar from './EditingToolbar';
 
 interface TextBlockProps {
   block: TextBlockType;
@@ -9,59 +9,6 @@ interface TextBlockProps {
   onDelete: (id: string) => void;
   onMoveBlock: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
 }
-
-const parseMarkdown = (text: string): string => {
-  const lines = text.split('\n');
-  let html = '';
-  let inUList = false;
-  let inOList = false;
-
-  for (const line of lines) {
-    if (!line.match(/^\s*[-*] /) && inUList) {
-      html += '</ul>\n';
-      inUList = false;
-    }
-    if (!line.match(/^\s*\d+\. /) && inOList) {
-      html += '</ol>\n';
-      inOList = false;
-    }
-
-    if (line.startsWith('### ')) {
-      html += `<h3>${line.substring(4)}</h3>\n`;
-    } else if (line.startsWith('## ')) {
-      html += `<h2>${line.substring(3)}</h2>\n`;
-    } else if (line.startsWith('# ')) {
-      html += `<h1>${line.substring(2)}</h1>\n`;
-    } else if (line.startsWith('> ')) {
-      html += `<blockquote>${line.substring(2)}</blockquote>\n`;
-    } else if (line.match(/^\s*[-*] /)) {
-      if (!inUList) {
-        html += '<ul>\n';
-        inUList = true;
-      }
-      html += `<li>${line.replace(/^\s*[-*] /, '')}</li>\n`;
-    } else if (line.match(/^\s*\d+\. /)) {
-      if (!inOList) {
-        html += '<ol>\n';
-        inOList = true;
-      }
-      html += `<li>${line.replace(/^\s*\d+\. /, '')}</li>\n`;
-    } else {
-      html += `<p>${line}</p>\n`;
-    }
-  }
-
-  if (inUList) html += '</ul>\n';
-  if (inOList) html += '</ol>\n';
-
-  return html
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/__(.*?)__/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/_(.*?)_/g, '<em>$1</em>')
-    .replace(/~~(.*?)~~/g, '<del>$1</del>');
-};
-
 
 const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMoveBlock }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -91,10 +38,30 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
     }
   };
 
+  const handleBoldClick = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = text.substring(start, end);
+    const newText = `${text.substring(0, start)}**${selectedText}**${text.substring(end)}`;
+    
+    setText(newText);
+    setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(end + 2, end + 2);
+    }, 0);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleBlur();
+    }
+     if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        handleBoldClick();
     }
   };
   
@@ -142,23 +109,29 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
         <GripVerticalIcon />
       </div>
       <div className="w-5 flex-shrink-0" />
-      {isEditing ? (
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={handleTextChange}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          className="w-full bg-gray-100/50 dark:bg-gray-700/50 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none overflow-hidden text-gray-800 dark:text-gray-300 -m-2"
-          rows={1}
-        />
-      ) : (
-        <div 
-          onClick={() => setIsEditing(true)} 
-          className="prose-styles whitespace-pre-wrap cursor-pointer flex-grow p-2 -m-2 rounded-md hover:bg-gray-200/50 dark:hover:bg-gray-700/50 w-full"
-          dangerouslySetInnerHTML={{ __html: parseMarkdown(block.text || ' ') }}
-        />
-      )}
+      <div className="w-full relative">
+        {isEditing ? (
+          <>
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={handleTextChange}
+              onBlur={handleBlur}
+              onKeyDown={handleKeyDown}
+              className="w-full bg-gray-100/50 dark:bg-gray-700/50 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none overflow-hidden text-gray-900 dark:text-gray-200 -m-2"
+              rows={1}
+            />
+            <EditingToolbar onBold={handleBoldClick} />
+          </>
+        ) : (
+          <div 
+            onClick={() => setIsEditing(true)} 
+            className="whitespace-pre-wrap cursor-pointer flex-grow p-2 -m-2 rounded-md hover:bg-gray-200/50 dark:hover:bg-gray-700/50 w-full text-gray-900 dark:text-gray-200"
+          >
+            {block.text || ' '}
+          </div>
+        )}
+      </div>
       <button
         onClick={() => onDelete(block.id)}
         className="text-gray-400 dark:text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"

@@ -55,8 +55,8 @@ export const XCircleIcon = () => (
     </svg>
 );
 
-export const ClipboardListIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+export const ClipboardListIcon = ({className = "h-5 w-5"}: {className?: string}) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
     </svg>
 );
@@ -101,12 +101,6 @@ export const SettingsIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-  </svg>
-);
-
-export const AppleIcon = () => (
-  <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path d="M15.226 1.343a4.294 4.294 0 0 0-4.135 1.534 4.216 4.216 0 0 0-4.135-1.534c-1.891 0-3.635 1.258-4.71 3.163-1.636 2.895-.698 7.034 1.488 9.994 1.139 1.54 2.454 3.238 4.216 3.238 1.636 0 2.257-.96 4.135-.96s2.5 1.039 4.135 1.039c1.762 0 3.077-1.698 4.216-3.238 2.264-2.96 3.124-7.022 1.488-9.994-1.15-1.984-2.9-3.24-4.797-3.24zm-1.183 2.015c.038.013.088.026.126.026.025 0 .05 0 .076-.013.911-.278 1.891-.48 2.87-.417 1.537.065 2.846.973 3.584 1.958-.354.213-.708.44-1.088.666-.936.628-1.928 1-2.983.947-.911-.078-1.853-.518-2.675-1.09-.329-.226-.645-.48-.936-.744.228-.114.468-.213.708-.316.48-.19 1.012-.34 1.527-.455z"/>
   </svg>
 );
 
@@ -169,6 +163,12 @@ export const DownloadIcon = () => (
 
 export const DocumentTextIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2-2z" />
     </svg>
+);
+
+export const BoldIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-4-7h8a4 4 0 000-8H8v4m4 3h4a4 4 0 010 8H8v-4" />
+  </svg>
 );

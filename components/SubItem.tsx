@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SubItemBlock } from '../types';
 import { TrashIcon, CheckCircleIcon, CircleIcon, PlusCircleIcon, GripVerticalIcon } from './Icons';
+import EditingToolbar from './EditingToolbar';
 
 interface SubItemProps {
   subItem: SubItemBlock;
@@ -12,6 +13,12 @@ interface SubItemProps {
   onMoveBlock: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
   level?: number;
 }
+
+const parseInlineMarkdown = (text: string): string => {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.*?)__/g, '<strong>$1</strong>');
+};
 
 const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete, onAddNestedSubItem, onMoveBlock, level = 0 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -47,10 +54,30 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
       e.target.style.height = `${e.target.scrollHeight}px`;
   }
 
+  const handleBoldClick = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = text.substring(start, end);
+    const newText = `${text.substring(0, start)}**${selectedText}**${text.substring(end)}`;
+    
+    setText(newText);
+    setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(end + 2, end + 2);
+    }, 0);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleBlur();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        handleBoldClick();
     }
   };
 
@@ -98,26 +125,28 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
           {subItem.completed ? <CheckCircleIcon /> : <CircleIcon />}
         </button>
         {isEditing ? (
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={handleTextareaChange}
-            onBlur={handleBlur}
-            onKeyDown={handleKeyDown}
-            className={`flex-grow bg-transparent focus:outline-none resize-none overflow-hidden ${
-              subItem.completed ? 'line-through text-gray-500 dark:text-gray-500' : 'text-gray-800 dark:text-gray-300'
-            }`}
-            rows={1}
-          />
+          <div className="flex-grow relative">
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={handleTextareaChange}
+              onBlur={handleBlur}
+              onKeyDown={handleKeyDown}
+              className={`w-full bg-transparent focus:outline-none resize-none overflow-hidden ${
+                subItem.completed ? 'line-through text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-gray-200'
+              }`}
+              rows={1}
+            />
+            <EditingToolbar onBold={handleBoldClick} />
+          </div>
         ) : (
-          <span
+          <div
             onClick={() => setIsEditing(true)}
             className={`flex-grow cursor-pointer whitespace-pre-wrap ${
-              subItem.completed ? 'line-through text-gray-500 dark:text-gray-500' : 'text-gray-800 dark:text-gray-300'
+              subItem.completed ? 'line-through text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-gray-200'
             }`}
-          >
-            {subItem.text || <span className="text-gray-500 italic">Subitem vazio</span>}
-          </span>
+             dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(subItem.text || '<span class="text-gray-500 italic">Subitem vazio</span>') }}
+          />
         )}
         <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
             {level < 2 && (
