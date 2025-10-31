@@ -18,6 +18,7 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
   const [text, setText] = useState(block.text);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -151,6 +152,11 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('text/plain', block.id);
     e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => setIsDragging(true), 0);
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -175,9 +181,13 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
 
   return (
     <div 
-        className="flex items-start space-x-3 group py-1.5 relative"
+        className={`flex items-start space-x-3 group py-1.5 relative transition-all duration-200
+          ${dragOverPosition ? 'bg-teal-100 dark:bg-teal-900/30 rounded-md' : ''}
+          ${isDragging ? 'opacity-40' : ''}
+        `}
         draggable
         onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}

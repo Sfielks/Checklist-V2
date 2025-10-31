@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect } from 'react';
 import { SubItemBlock } from '../types';
 import { TrashIcon, CheckCircleIcon, CircleIcon, PlusCircleIcon, GripVerticalIcon } from './Icons';
@@ -27,6 +26,7 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
   const [text, setText] = useState(subItem.text);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -106,6 +106,11 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('text/plain', subItem.id);
     e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => setIsDragging(true), 0);
+  };
+  
+  const handleDragEnd = () => {
+    setIsDragging(false);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -133,9 +138,14 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
        {dragOverPosition === 'top' && <div className="absolute top-0 left-0 right-0 h-2 bg-teal-500 rounded shadow-[0_0_12px_2px] shadow-teal-400/60 z-10"></div>}
        {dragOverPosition === 'bottom' && <div className="absolute bottom-0 left-0 right-0 h-2 bg-teal-500 rounded shadow-[0_0_12px_2px] shadow-teal-400/60 z-10"></div>}
       <div 
-        className={`flex items-center space-x-3 group py-1.5 rounded-md transition-colors ${subItem.completed ? 'bg-gray-100 dark:bg-gray-800/30' : 'hover:bg-gray-100/50 dark:hover:bg-gray-700/20'}`}
+        className={`flex items-center space-x-3 group py-1.5 rounded-md transition-all duration-200 
+          ${subItem.completed ? 'bg-gray-100 dark:bg-gray-800/30' : 'hover:bg-gray-100/50 dark:hover:bg-gray-700/20'}
+          ${dragOverPosition ? 'bg-teal-100 dark:bg-teal-900/30' : ''}
+          ${isDragging ? 'opacity-40' : ''}
+        `}
         draggable
         onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -143,7 +153,7 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
         <div className="cursor-grab text-gray-400 dark:text-gray-500" title="Mover item">
             <GripVerticalIcon />
         </div>
-        <button onClick={() => onToggle(subItem.id)} className="flex-shrink-0">
+        <button onClick={() => onToggle(subItem.id)} className="flex-shrink-0" title={subItem.completed ? "Marcar como 'a fazer'" : "Marcar como 'concluído'"}>
           {subItem.completed ? <CheckCircleIcon /> : <CircleIcon />}
         </button>
         {isEditing ? (
@@ -168,6 +178,7 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
               subItem.completed ? 'line-through text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-gray-200'
             }`}
              dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(subItem.text || '<span class="text-gray-500 italic">Subitem vazio</span>') }}
+             title="Clique para editar"
           />
         )}
         <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">

@@ -19,12 +19,18 @@ const formatFileSize = (bytes: number): string => {
 const AttachmentBlock: React.FC<AttachmentBlockProps> = ({ block, onDelete, onMoveBlock }) => {
   const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const isImage = block.fileType.startsWith('image/');
 
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('text/plain', block.id);
     e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => setIsDragging(true), 0);
+  };
+  
+  const handleDragEnd = () => {
+    setIsDragging(false);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -50,9 +56,13 @@ const AttachmentBlock: React.FC<AttachmentBlockProps> = ({ block, onDelete, onMo
   return (
     <>
       <div
-        className="flex items-start space-x-3 group py-1.5 relative"
+        className={`flex items-start space-x-3 group py-1.5 relative transition-all duration-200
+          ${dragOverPosition ? 'bg-teal-100 dark:bg-teal-900/30 rounded-lg' : ''}
+          ${isDragging ? 'opacity-40' : ''}
+        `}
         draggable
         onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}

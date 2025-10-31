@@ -1,4 +1,7 @@
 {
   "name": "Checklist v2.2",
-  "description": "A checklist application inspired by Google Keep and Gemini, allowing users to create tasks with nested, checkable sub-items. Perfect for organizing complex projects and to-do lists."
+  "description": "A checklist application inspired by Google Keep and Gemini, allowing users to create tasks with nested, checkable sub-items. Perfect for organizing complex projects and to-do lists.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }
