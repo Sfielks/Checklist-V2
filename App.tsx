@@ -1,10 +1,5 @@
 
-
-
-
-
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock, SavedAnalysis, SyncStatus } from './types';
 import TaskCard from './components/TaskCard';
 import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon, SparklesIcon, BookmarkIcon, MicrophoneIcon, SearchIcon, ViewGridIcon, ViewListIcon } from './components/Icons';
@@ -14,6 +9,7 @@ import PanoramaModal from './components/PanoramaModal';
 import SavedAnalysesModal from './components/SavedAnalysesModal';
 import LiveConversationModal from './components/LiveConversationModal';
 import Sidebar from './components/Sidebar';
+import ImportConfirmationModal from './components/ImportConfirmationModal';
 
 const initialTasks: TaskType[] = [
   {
@@ -70,6 +66,13 @@ type Theme = 'light' | 'dark';
 type View = 'home' | 'checklist';
 type User = { id: string; name: string };
 type LayoutMode = 'grid' | 'list';
+type MainView = 'active' | 'today' | 'archived';
+
+interface BackupData {
+  version: number;
+  tasks: TaskType[];
+  savedAnalyses: SavedAnalysis[];
+}
 
 
 // Mock Cloud Storage API
@@ -168,6 +171,21 @@ const filterContentTree = (content: ContentBlock[], targetId: string): [ContentB
   return [newContent, wasModified];
 };
 
+const findBlockInTree = (content: ContentBlock[], blockId: string): ContentBlock | null => {
+  for (const block of content) {
+    if (block.id === blockId) {
+      return block;
+    }
+    if (block.type === 'subitem' && block.children?.length > 0) {
+      const foundInChildren = findBlockInTree(block.children, blockId);
+      if (foundInChildren) {
+        return foundInChildren;
+      }
+    }
+  }
+  return null;
+};
+
 const migrateContent = (items: any[]): ContentBlock[] => {
     return items.map(item => {
         if (item.type === 'subitem') {
@@ -247,6 +265,9 @@ const App: React.FC = () => {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [newlyCreatedTaskId, setNewlyCreatedTaskId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [recentlyDeleted, setRecentlyDeleted] = useState<{ block: ContentBlock; taskId: string; originalTaskContent: ContentBlock[] } | null>(null);
+  const undoTimeoutRef = useRef<number | null>(null);
+  const [importFileData, setImportFileData] = useState<BackupData | null>(null);
 
 
   const [tasks, setTasks] = useState<TaskType[]>(() => {
@@ -319,7 +340,7 @@ const App: React.FC = () => {
     }
   });
 
-  const [showArchived, setShowArchived] = useState(false);
+  const [mainView, setMainView] = useState<MainView>('active');
   const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'in-progress'>('all');
@@ -480,12 +501,13 @@ const App: React.FC = () => {
 
   const handleAddTask = () => {
     const newTaskId = Date.now().toString();
+    const todayStr = new Date().toISOString().split('T')[0];
     const newTask: TaskType = {
       id: newTaskId,
       title: 'Nova Tarefa',
       content: [],
       priority: 'none',
-      dueDate: '',
+      dueDate: mainView === 'today' ? todayStr : '',
       category: categoryFilter !== 'all' ? categoryFilter : '',
       archived: false,
       createdAt: new Date().toISOString(),
@@ -603,18 +625,50 @@ const App: React.FC = () => {
   };
 
   const handleDeleteBlock = (taskId: string, blockId: string) => {
-    setTasks(tasks.map(task => {
-      if (task.id === taskId) {
-          const [newContentTree, foundInTree] = filterContentTree(task.content, blockId);
-          if (foundInTree) {
-              return { ...task, content: newContentTree };
-          }
-          
-          return { ...task, content: task.content.filter(block => block.id !== blockId) };
-      }
-      return task;
-    }));
+    if (undoTimeoutRef.current) {
+        clearTimeout(undoTimeoutRef.current);
+    }
+
+    const taskToUpdate = tasks.find(t => t.id === taskId);
+    if (!taskToUpdate) return;
+
+    const originalTaskContent = taskToUpdate.content;
+    const deletedBlock = findBlockInTree(originalTaskContent, blockId);
+
+    if (!deletedBlock) return;
+
+    const [newContent] = filterContentTree(originalTaskContent, blockId);
+
+    setTasks(currentTasks => currentTasks.map(task => 
+        task.id === taskId ? { ...task, content: newContent } : task
+    ));
+
+    setRecentlyDeleted({ block: deletedBlock, taskId, originalTaskContent });
+    
+    undoTimeoutRef.current = window.setTimeout(() => {
+        setRecentlyDeleted(null);
+        undoTimeoutRef.current = null;
+    }, 5000);
   };
+
+  const handleUndoDeleteBlock = () => {
+    if (!recentlyDeleted) return;
+
+    if (undoTimeoutRef.current) {
+        clearTimeout(undoTimeoutRef.current);
+        undoTimeoutRef.current = null;
+    }
+
+    setTasks(currentTasks => currentTasks.map(task => {
+        if (task.id === recentlyDeleted.taskId) {
+            return { ...task, content: recentlyDeleted.originalTaskContent };
+        }
+        return task;
+    }));
+
+    setRecentlyDeleted(null);
+  };
+
 
   const handleToggleSubItem = (taskId: string, subItemId: string) => {
     setTasks(tasks.map(task => {
@@ -796,13 +850,18 @@ const App: React.FC = () => {
 
   const handleExportData = () => {
     try {
-      const dataStr = JSON.stringify(tasks, null, 2);
+      const dataToExport: BackupData = {
+        version: 1,
+        tasks: tasks,
+        savedAnalyses: savedAnalyses,
+      };
+      const dataStr = JSON.stringify(dataToExport, null, 2);
       const dataBlob = new Blob([dataStr], { type: 'application/json' });
       const url = URL.createObjectURL(dataBlob);
       const link = document.createElement('a');
       link.href = url;
       const date = new Date().toISOString().split('T')[0];
-      link.download = `checklist-v2-backup-${date}.json`;
+      link.download = `checklist-backup-${date}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -823,29 +882,80 @@ const App: React.FC = () => {
       try {
         const text = e.target?.result;
         if (typeof text === 'string') {
-          const importedTasks: TaskType[] = JSON.parse(text);
-          // Basic validation
-          if (Array.isArray(importedTasks) && importedTasks.every(t => 'id' in t && 'title' in t)) {
-            const migratedTasks = importedTasks.map(task => ({
-                ...task,
-                archived: task.archived || false,
-                content: migrateContent(task.content || []),
-                createdAt: task.createdAt || new Date().toISOString(),
-            }));
-            setTasks(migratedTasks);
-            const importedCategories = Array.from(new Set(migratedTasks.map(t => t.category).filter(Boolean)));
-            setCategories(importedCategories.sort());
+          const importedData = JSON.parse(text);
+          // Validation
+          if (
+            typeof importedData === 'object' &&
+            importedData !== null &&
+            'version' in importedData &&
+            'tasks' in importedData && Array.isArray(importedData.tasks) &&
+            'savedAnalyses' in importedData && Array.isArray(importedData.savedAnalyses)
+          ) {
+            setImportFileData(importedData as BackupData);
             setIsSettingsOpen(false);
           } else {
-            throw new Error("Invalid file format");
+            throw new Error("Formato de arquivo inválido ou faltando campos obrigatórios (version, tasks, savedAnalyses).");
           }
         }
       } catch (error) {
         console.error("Failed to import data", error);
-        alert("Ocorreu um erro ao importar os dados. Verifique o formato do arquivo.");
+        alert(`Ocorreu um erro ao importar os dados. Verifique o formato do arquivo.\n\nDetalhes: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
     reader.readAsText(file);
+    event.target.value = ''; // Reset file input
+  };
+  
+  const handleConfirmImport = (mode: 'merge' | 'replace') => {
+    if (!importFileData) return;
+
+    const { tasks: importedTasks, savedAnalyses: importedAnalyses } = importFileData;
+    const migratedTasks = importedTasks.map(task => ({
+        ...task,
+        archived: task.archived || false,
+        content: migrateContent(task.content || []),
+        createdAt: task.createdAt || new Date().toISOString(),
+    }));
+
+    if (mode === 'replace') {
+      setTasks(migratedTasks);
+      setSavedAnalyses(importedAnalyses);
+    } else { // merge
+        const regenerateContentIds = (content: ContentBlock[]): ContentBlock[] => {
+            return content.map(block => {
+                const newBlock = { ...block, id: `${Date.now()}-${Math.random()}` };
+                if (newBlock.type === 'subitem' && newBlock.children?.length > 0) {
+                newBlock.children = regenerateContentIds(newBlock.children) as SubItemBlock[];
+                }
+                return newBlock;
+            });
+        };
+
+        const newTasks = migratedTasks.map(task => ({
+            ...task,
+            id: `${Date.now()}-${Math.random()}`,
+            content: regenerateContentIds(task.content)
+        }));
+
+        const newAnalyses = importedAnalyses.map(analysis => ({
+            ...analysis,
+            id: new Date().toISOString() + Math.random()
+        }));
+
+        setTasks(prev => [...prev, ...newTasks]);
+        setSavedAnalyses(prev => [...prev, ...newAnalyses]);
+    }
+    
+    // Update categories from all tasks after import
+    const allTasks = mode === 'replace' ? migratedTasks : [...tasks, ...migratedTasks];
+    const updatedCategories = Array.from(new Set(allTasks.map(t => t.category).filter(Boolean)));
+    setCategories(updatedCategories.sort());
+
+    setImportFileData(null);
+  };
+
+  const handleCancelImport = () => {
+    setImportFileData(null);
   };
 
   const handleResetData = () => {
@@ -975,7 +1085,15 @@ const App: React.FC = () => {
   };
 
   const filteredTasks = tasks.filter((task) => {
-    const isArchivedMatch = showArchived ? task.archived : !task.archived;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const isViewMatch =
+      mainView === 'active'
+        ? !task.archived
+        : mainView === 'archived'
+        ? task.archived
+        : !task.archived && task.dueDate === todayStr; // 'today'
+
     const isPriorityMatch = priorityFilter === 'all' || task.priority === priorityFilter;
     const isCategoryMatch = categoryFilter === 'all' || task.category === categoryFilter;
 
@@ -998,7 +1116,7 @@ const App: React.FC = () => {
 
     const searchLower = searchQuery.toLowerCase().trim();
     if (!searchLower) {
-      return isArchivedMatch && isPriorityMatch && isCategoryMatch && isStatusMatch();
+      return isViewMatch && isPriorityMatch && isCategoryMatch && isStatusMatch();
     }
 
     const checkContent = (content: ContentBlock[]): boolean => {
@@ -1023,11 +1141,17 @@ const App: React.FC = () => {
         (task.category && task.category.toLowerCase().includes(searchLower)) ||
         checkContent(task.content);
     
-    return isArchivedMatch && isPriorityMatch && isCategoryMatch && isStatusMatch() && isSearchMatch;
+    return isViewMatch && isPriorityMatch && isCategoryMatch && isStatusMatch() && isSearchMatch;
   });
 
   const archivedTaskCount = tasks.filter(t => t.archived).length;
-  const pageTitle = showArchived ? 'Tarefas Arquivadas' : categoryFilter !== 'all' ? categoryFilter : 'Suas Tarefas';
+  const pageTitle = (() => {
+    if (mainView === 'archived') return 'Tarefas Arquivadas';
+    if (mainView === 'today') return 'Tarefas para Hoje';
+    if (categoryFilter !== 'all') return categoryFilter;
+    return 'Suas Tarefas';
+  })();
+
 
   if (view === 'home') {
     return <HomeScreen onGuestLogin={handleGuestLogin} />;
@@ -1089,8 +1213,8 @@ const App: React.FC = () => {
     setIsSettingsOpen,
     setIsPanoramaOpen,
     setIsSavedAnalysesOpen,
-    showArchived,
-    setShowArchived,
+    mainView,
+    setMainView,
     archivedTaskCount,
     categoryFilter,
     setCategoryFilter,
@@ -1156,6 +1280,13 @@ const App: React.FC = () => {
         onRequestNotificationPermission={handleRequestNotificationPermission}
       />
       
+      <ImportConfirmationModal
+        isOpen={!!importFileData}
+        onClose={handleCancelImport}
+        onConfirm={handleConfirmImport}
+        fileData={importFileData}
+      />
+
       <PanoramaModal
         isOpen={isPanoramaOpen}
         onClose={() => setIsPanoramaOpen(false)}
@@ -1248,7 +1379,7 @@ const App: React.FC = () => {
                     <FilterIcon />
                     <span className="hidden sm:inline">Filtros</span>
                 </button>
-                {!showArchived && (
+                {mainView !== 'archived' && (
                     <>
                         <button
                             onClick={() => setIsLiveConversationOpen(true)}
@@ -1318,6 +1449,8 @@ const App: React.FC = () => {
                   draggedTaskId={draggedTaskId}
                   onSetDraggedTaskId={setDraggedTaskId}
                   isNew={task.id === newlyCreatedTaskId}
+                  recentlyDeleted={recentlyDeleted}
+                  onUndoDeleteBlock={handleUndoDeleteBlock}
                 />
               ))}
             </div>
@@ -1330,11 +1463,11 @@ const App: React.FC = () => {
                 <p className="text-gray-500 dark:text-gray-400 mt-2">
                   {searchQuery
                     ? 'Tente ajustar sua busca ou limpar os filtros.'
-                    : showArchived
+                    : mainView === 'archived'
                     ? 'Você não tem tarefas arquivadas.'
                     : 'Crie uma nova tarefa para começar.'}
                 </p>
-                {!showArchived && !searchQuery && (
+                {mainView !== 'archived' && !searchQuery && (
                   <button
                       onClick={handleAddTask}
                       className="mt-6 flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold px-5 py-2.5 rounded-lg hover:bg-teal-700 transition-transform transform hover:scale-105 shadow-lg mx-auto"
@@ -1350,7 +1483,7 @@ const App: React.FC = () => {
       </div>
 
       {/* FAB for Mobile */}
-      {!showArchived && (
+      {mainView !== 'archived' && (
         <button
           onClick={handleAddTask}
           className="lg:hidden fixed bottom-6 right-6 bg-teal-600 text-white p-4 rounded-full shadow-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 dark:focus:ring-offset-gray-900 transition-transform transform hover:scale-110"

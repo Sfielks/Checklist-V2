@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { TaskType, Priority, SyncStatus } from '../types';
 import {
@@ -17,6 +18,8 @@ import {
   CloudOffIcon,
   ExclamationCircleIcon
 } from './Icons';
+
+type MainView = 'active' | 'today' | 'archived';
 
 const priorityOptions: Record<Priority | 'all', string> = {
     all: 'Todas as Prioridades',
@@ -64,8 +67,8 @@ const SyncStatusIndicator: React.FC<{ status: SyncStatus }> = ({ status }) => {
 interface SidebarProps {
   tasks: TaskType[];
   categories: string[];
-  showArchived: boolean;
-  setShowArchived: (show: boolean) => void;
+  mainView: MainView;
+  setMainView: (view: MainView) => void;
   categoryFilter: string;
   setCategoryFilter: (filter: string) => void;
   priorityFilter: Priority | 'all';
@@ -89,8 +92,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   setIsSettingsOpen,
   setIsPanoramaOpen,
   setIsSavedAnalysesOpen,
-  showArchived,
-  setShowArchived,
+  mainView,
+  setMainView,
   archivedTaskCount,
   categoryFilter,
   setCategoryFilter,
@@ -108,6 +111,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   handleLogout,
   onClose,
 }) => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayTaskCount = tasks.filter(t => !t.archived && t.dueDate === todayStr).length;
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-grow">
@@ -129,16 +135,25 @@ const Sidebar: React.FC<SidebarProps> = ({
             <ul className="space-y-1">
               <li>
                 <button
-                  onClick={() => { setShowArchived(false); onClose?.(); }}
-                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium ${!showArchived ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                  onClick={() => { setMainView('active'); onClose?.(); }}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium ${mainView === 'active' ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                 >
                   Tarefas Ativas
                 </button>
               </li>
               <li>
                 <button
-                  onClick={() => { setShowArchived(true); onClose?.(); }}
-                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${showArchived ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                  onClick={() => { setMainView('today'); onClose?.(); }}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${mainView === 'today' ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                >
+                  <span className="flex items-center gap-2"><BellIcon/> <span>Tarefas para Hoje</span></span>
+                  {todayTaskCount > 0 && <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{todayTaskCount}</span>}
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => { setMainView('archived'); onClose?.(); }}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${mainView === 'archived' ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                 >
                   <span>Arquivadas</span>
                   {archivedTaskCount > 0 && <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{archivedTaskCount}</span>}

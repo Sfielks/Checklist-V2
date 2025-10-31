@@ -4,7 +4,7 @@ import { TaskType, ContentBlock, SubItemBlock, Priority } from '../types';
 import SubItem from './SubItem';
 import TextBlock from './TextBlock';
 import AttachmentBlock from './AttachmentBlock';
-import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon, DotsVerticalIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon } from './Icons';
+import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon, DotsVerticalIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, ClipboardListIcon } from './Icons';
 import ColorPalette from './ColorPalette';
 
 interface TaskCardProps {
@@ -26,6 +26,8 @@ interface TaskCardProps {
   draggedTaskId: string | null;
   onSetDraggedTaskId: (id: string | null) => void;
   isNew?: boolean;
+  recentlyDeleted: { block: ContentBlock; taskId: string } | null;
+  onUndoDeleteBlock: () => void;
 }
 
 const priorityConfig: Record<Priority, { label: string; ringColor: string; dotColor: string }> = {
@@ -33,7 +35,7 @@ const priorityConfig: Record<Priority, { label: string; ringColor: string; dotCo
     low: { label: 'Baixa', ringColor: 'focus:ring-blue-400', dotColor: 'bg-blue-500' },
     medium: { label: 'Média', ringColor: 'focus:ring-yellow-400', dotColor: 'bg-yellow-500' },
     high: { label: 'Alta', ringColor: 'focus:ring-orange-400', dotColor: 'bg-orange-500' },
-    urgent: { label: 'Urgente', ringColor: 'focus:ring-red-500', dotColor: 'bg-red-600' },
+    urgent: { label: 'Urgente', ringColor: 'focus:ring-red-600', dotColor: 'bg-red-600' },
 };
 
 const countSubItems = (items: ContentBlock[]): { total: number; completed: number } => {
@@ -49,6 +51,17 @@ const countSubItems = (items: ContentBlock[]): { total: number; completed: numbe
         }
     }
     return { total, completed };
+};
+
+const getDeletedItemName = (block: ContentBlock | undefined): string => {
+    if (!block) return 'Item';
+    let name = '';
+    if (block.type === 'attachment') {
+        name = block.fileName;
+    } else {
+        name = block.text;
+    }
+    return name || 'Item sem nome';
 };
 
 
@@ -71,6 +84,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
   draggedTaskId,
   onSetDraggedTaskId,
   isNew = false,
+  recentlyDeleted,
+  onUndoDeleteBlock,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -309,6 +324,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
               {formatDate(task.createdAt)}
             </p>
+            <a href="#" onClick={(e) => e.preventDefault()} className="text-sm text-teal-600 dark:text-teal-400 hover:underline mt-2 inline-block">
+              Saiba mais
+            </a>
           </div>
         </div>
 
@@ -356,9 +374,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </div>
       </div>
       
-      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isCompact ? 'max-h-0 opacity-0 mt-0' : 'max-h-[1000px] opacity-100 mt-4'}`}>
+      <div className={`relative transition-all duration-300 ease-in-out overflow-hidden ${isCompact ? 'max-h-48 mt-4' : 'max-h-[1000px] opacity-100 mt-4'}`}>
         <div className="flex flex-col gap-4">
-            <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-6 gap-y-3 text-sm text-gray-500 dark:text-gray-400 border-b border-t border-gray-200 dark:border-gray-700/50 py-3 -mx-5 px-5">
+            <div className={`flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-6 gap-y-3 text-sm text-gray-500 dark:text-gray-400 border-b border-t border-gray-200 dark:border-gray-700/50 py-3 -mx-5 px-5 ${isCompact ? 'hidden' : ''}`}>
               <div className="flex items-center gap-2">
                   <label htmlFor={`priority-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">Prioridade:</label>
                   <select
@@ -416,7 +434,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
               </div>
             </div>
             
-            <div className={`w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 ${totalSubItems > 0 ? 'block' : 'hidden'}`}>
+            <div className={`w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 ${totalSubItems > 0 ? 'block' : 'hidden'} ${isCompact ? 'hidden' : ''}`}>
               <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
             </div>
 
@@ -426,7 +444,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
               onDragOver={handleContentDragOver}
               onDrop={handleContentDrop}
              >
-              {task.content.map((block) => {
+              {task.content.length > 0 ? task.content.map((block) => {
                  if (block.type === 'subitem') {
                   return (
                     <SubItem
@@ -462,10 +480,15 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   );
                 }
                 return null;
-              })}
+              }) : (
+                <div className={`flex flex-col items-center justify-center h-full text-center py-4 text-gray-500 dark:text-gray-400 ${isCompact ? 'pt-12' : ''}`}>
+                  <ClipboardListIcon className="h-8 w-8 mx-auto" />
+                  <p className="text-sm mt-2">Esta tarefa está vazia.</p>
+                </div>
+              )}
             </div>
             
-            <div className="mt-auto pt-4 flex items-center justify-stretch gap-2 text-sm">
+            <div className={`mt-auto pt-4 flex items-center justify-stretch gap-2 text-sm ${isCompact ? 'hidden' : ''}`}>
               <button
                 onClick={() => onAddBlock(task.id, 'subitem')}
                 className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
@@ -489,7 +512,21 @@ const TaskCard: React.FC<TaskCardProps> = ({
               </button>
             </div>
         </div>
+        {isCompact && task.content.length > 0 && <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white dark:from-gray-800 to-transparent pointer-events-none" />}
       </div>
+      {recentlyDeleted && recentlyDeleted.taskId === task.id && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] bg-gray-800 dark:bg-gray-200 text-white dark:text-black p-3 rounded-lg shadow-2xl flex items-center justify-between z-20 animate-slide-up">
+            <span className="text-sm truncate pr-2" title={`"${getDeletedItemName(recentlyDeleted.block)}"`}>
+                "{getDeletedItemName(recentlyDeleted.block)}" excluído.
+            </span>
+            <button 
+                onClick={onUndoDeleteBlock}
+                className="font-bold text-sm text-teal-400 dark:text-teal-600 hover:underline flex-shrink-0"
+            >
+                Desfazer
+            </button>
+        </div>
+      )}
       <input
         type="file"
         ref={attachmentInputRef}

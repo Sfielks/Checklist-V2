@@ -1,6 +1,7 @@
 
+
 import React, { useRef } from 'react';
-import { XIcon, SunIcon, MoonIcon, BellIcon, CheckCircleIcon, XCircleIcon } from './Icons';
+import { XIcon, SunIcon, MoonIcon, BellIcon, CheckCircleIcon, XCircleIcon, DownloadIcon, UploadIcon } from './Icons';
 
 type Theme = 'light' | 'dark';
 
@@ -111,19 +112,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Data Management Section */}
           <section>
-            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">Gerenciamento de Dados</h3>
+            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">Backup e Restauração</h3>
             <div className="flex flex-col sm:flex-row gap-4">
               <button
                 onClick={onExport}
-                className="flex-1 px-4 py-2 bg-teal-600 text-white font-semibold rounded-md hover:bg-teal-700 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-teal-600 text-white font-semibold rounded-md hover:bg-teal-700 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500"
               >
-                Exportar Dados (.json)
+                <DownloadIcon />
+                Exportar Dados
               </button>
               <button
                 onClick={handleImportClick}
-                className="flex-1 px-4 py-2 bg-gray-600 text-white font-semibold rounded-md hover:bg-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-600 text-white font-semibold rounded-md hover:bg-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400"
               >
-                Importar Dados (.json)
+                <UploadIcon />
+                Importar Dados
               </button>
               <input
                 type="file"
@@ -134,7 +137,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               />
             </div>
              <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">
-               Salve suas tarefas em um arquivo ou carregue-as de um backup. Importar irá substituir todas as tarefas atuais.
+               Salve um backup de todas as suas tarefas e análises. Ao importar, você poderá escolher entre mesclar ou substituir os dados existentes.
              </p>
           </section>
 
