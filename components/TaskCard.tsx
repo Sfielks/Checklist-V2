@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, Priority } from '../types';
 import SubItem from './SubItem';
@@ -24,6 +25,8 @@ interface TaskCardProps {
   onToggleArchive: (id: string) => void;
   onMoveBlock: (taskId: string, sourceId: string, targetId: string | null, position: 'before' | 'after' | 'end') => void;
   onMoveTask: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
+  draggedTaskId: string | null;
+  onSetDraggedTaskId: (id: string | null) => void;
 }
 
 const priorityConfig: Record<Priority, { label: string; ringColor: string; dotColor: string }> = {
@@ -66,6 +69,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onToggleArchive,
   onMoveBlock,
   onMoveTask,
+  draggedTaskId,
+  onSetDraggedTaskId,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -143,12 +148,18 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
   const handleTaskDragStart = (e: React.DragEvent) => {
     const target = e.target as HTMLElement;
-    if (target.tagName.toLowerCase() === 'input' || target.tagName.toLowerCase() === 'textarea' || target.tagName.toLowerCase() === 'select' || target.closest('button')) {
+    if (target.closest('input, textarea, select, button, [contenteditable]')) {
       e.preventDefault();
       return;
     }
     e.dataTransfer.setData('application/task-id', task.id);
     e.dataTransfer.effectAllowed = 'move';
+    onSetDraggedTaskId(task.id);
+  };
+  
+  const handleTaskDragEnd = () => {
+    onSetDraggedTaskId(null);
+    setDragOverPosition(null);
   };
 
   const handleTaskDragOver = (e: React.DragEvent) => {
@@ -220,18 +231,22 @@ const TaskCard: React.FC<TaskCardProps> = ({
       cat => cat.toLowerCase().includes(categoryValue.toLowerCase()) && cat.toLowerCase() !== categoryValue.toLowerCase()
   );
 
+  const isBeingDragged = draggedTaskId === task.id;
+  const showDropIndicator = draggedTaskId && !isBeingDragged;
+
   return (
     <div 
-      className="relative bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col gap-4 border border-gray-200 dark:border-gray-700/50 hover:border-teal-500/30 transition-all duration-300 border-t-8 cursor-grab"
+      className={`relative bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col gap-4 border border-gray-200 dark:border-gray-700/50 hover:border-teal-500/30 transition-all duration-300 ease-in-out border-t-8 cursor-grab ${isBeingDragged ? 'scale-105 shadow-2xl z-20 !opacity-100' : (draggedTaskId ? 'hover:!opacity-100' : '')}`}
       style={{ borderTopColor: task.color || 'transparent' }}
       draggable="true"
       onDragStart={handleTaskDragStart}
+      onDragEnd={handleTaskDragEnd}
       onDragOver={handleTaskDragOver}
       onDragLeave={handleTaskDragLeave}
       onDrop={handleTaskDrop}
     >
-      {dragOverPosition === 'top' && <div className="absolute -top-1 left-2 right-2 h-2 bg-teal-500 rounded shadow-[0_0_12px_2px] shadow-teal-400/60 z-10 pointer-events-none"></div>}
-      {dragOverPosition === 'bottom' && <div className="absolute -bottom-1 left-2 right-2 h-2 bg-teal-500 rounded shadow-[0_0_12px_2px] shadow-teal-400/60 z-10 pointer-events-none"></div>}
+      {showDropIndicator && dragOverPosition === 'top' && <div className="absolute top-[-4px] left-0 right-0 h-2 bg-teal-400 rounded-full shadow-[0_0_15px_4px] shadow-teal-400/70 z-20 pointer-events-none"></div>}
+      {showDropIndicator && dragOverPosition === 'bottom' && <div className="absolute bottom-[-4px] left-0 right-0 h-2 bg-teal-400 rounded-full shadow-[0_0_15px_4px] shadow-teal-400/70 z-20 pointer-events-none"></div>}
       
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-3 w-full mr-4 min-w-0">

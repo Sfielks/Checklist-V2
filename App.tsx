@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock, SavedAnalysis } from './types';
+import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock, SavedAnalysis, SyncStatus } from './types';
 import TaskCard from './components/TaskCard';
 import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon, SparklesIcon, BookmarkIcon, MicrophoneIcon } from './components/Icons';
 import ConfirmationDialog from './components/ConfirmationDialog';
@@ -9,6 +9,7 @@ import SettingsModal from './components/SettingsModal';
 import PanoramaModal from './components/PanoramaModal';
 import SavedAnalysesModal from './components/SavedAnalysesModal';
 import LiveConversationModal from './components/LiveConversationModal';
+import Sidebar from './components/Sidebar';
 
 const initialTasks: TaskType[] = [
   {
@@ -60,7 +61,6 @@ const THEME_STORAGE_KEY = 'checklist-app-theme';
 type Theme = 'light' | 'dark';
 type View = 'home' | 'checklist';
 type User = { id: string; name: string };
-type SyncStatus = 'syncing' | 'saved' | 'offline' | 'error';
 
 
 // Mock Cloud Storage API
@@ -94,82 +94,69 @@ const cloudStorage = {
   },
 };
 
-const SyncStatusIndicator: React.FC<{ status: SyncStatus }> = ({ status }) => {
-    const statusConfig: Record<SyncStatus, { icon: React.ReactNode; text: string; color: string }> = {
-      syncing: {
-        icon: <SpinnerIcon />,
-        text: 'Sincronizando...',
-        color: 'text-blue-500 dark:text-blue-400',
-      },
-      saved: {
-        icon: <CloudCheckIcon />,
-        text: 'Salvo na nuvem',
-        color: 'text-teal-600 dark:text-teal-400',
-      },
-      offline: {
-        icon: <CloudOffIcon />,
-        text: 'Modo Offline',
-        color: 'text-gray-500 dark:text-gray-400',
-      },
-      error: {
-        icon: <ExclamationCircleIcon />,
-        text: 'Falha na sincronização',
-        color: 'text-red-500 dark:text-red-400',
-      },
-    };
-  
-  const { icon, text, color } = statusConfig[status];
-
-  return (
-    <div className={`flex items-center gap-2 text-sm font-medium ${color} transition-colors duration-300`}>
-      <div className="flex-shrink-0">{icon}</div>
-      <span className="hidden sm:inline">{text}</span>
-    </div>
-  );
-};
-
-
 // Recursive helper functions for deep state manipulation
 const mapContentTree = (content: ContentBlock[], targetId: string, transform: (block: SubItemBlock) => SubItemBlock): [ContentBlock[], boolean] => {
-  let found = false;
-  const newContent = content.map(block => {
-    if (found) return block;
+  let wasModified = false;
+  const newContent: ContentBlock[] = [];
+
+  for (const block of content) {
+    if (wasModified) {
+      newContent.push(block);
+      continue;
+    }
+
     if (block.id === targetId && block.type === 'subitem') {
-      found = true;
-      return transform(block);
+      wasModified = true;
+      newContent.push(transform(block));
+      continue;
     }
+    
     if (block.type === 'subitem' && block.children?.length > 0) {
-      const [newChildren, childFound] = mapContentTree(block.children, targetId, transform);
-      if (childFound) {
-        found = true;
-        return { ...block, children: newChildren as SubItemBlock[] };
+      const [newChildren, childWasModified] = mapContentTree(block.children, targetId, transform);
+      if (childWasModified) {
+        wasModified = true;
+        newContent.push({ ...block, children: newChildren as SubItemBlock[] });
+      } else {
+        newContent.push(block);
       }
+    } else {
+      newContent.push(block);
     }
-    return block;
-  });
-  return [newContent, found];
+  }
+
+  return [newContent, wasModified];
 };
 
 const filterContentTree = (content: ContentBlock[], targetId: string): [ContentBlock[], boolean] => {
-  let found = false;
-  const newContent = content.filter(block => {
-      if (block.id === targetId) {
-          found = true;
-          return false;
+  let wasModified = false;
+  const newContent: ContentBlock[] = [];
+
+  for (const block of content) {
+    if (wasModified) {
+      newContent.push(block);
+      continue;
+    }
+    
+    if (block.id === targetId) {
+      wasModified = true;
+      // Do not push the block, effectively removing it.
+      continue;
+    }
+
+    if (block.type === 'subitem' && block.children?.length > 0) {
+      const [newChildren, childWasModified] = filterContentTree(block.children, targetId);
+      if (childWasModified) {
+        wasModified = true;
+        newContent.push({ ...block, children: newChildren as SubItemBlock[] });
+      } else {
+        newContent.push(block);
       }
-      return true;
-  }).map(block => {
-      if (found) return block;
-      if (block.type === 'subitem' && block.children?.length > 0) {
-          const [newChildren, childFound] = filterContentTree(block.children, targetId);
-          if (childFound) {
-              found = true;
-              return { ...block, children: newChildren as SubItemBlock[] };
-          }
-      }
-      return block;
-  });
-  return [newContent, found];
+    } else {
+      newContent.push(block);
+    }
+  }
+
+  return [newContent, wasModified];
 };
 
 const migrateContent = (items: any[]): ContentBlock[] => {
@@ -229,235 +216,6 @@ const HomeScreen = ({ onGuestLogin }: { onGuestLogin: () => void; }) => (
     </div>
 );
 
-const SidebarContent: React.FC<{
-  setIsSettingsOpen: (isOpen: boolean) => void;
-  setIsPanoramaOpen: (isOpen: boolean) => void;
-  setIsSavedAnalysesOpen: (isOpen: boolean) => void;
-  showArchived: boolean;
-  setShowArchived: (show: boolean) => void;
-  archivedTaskCount: number;
-  categoryFilter: string;
-  setCategoryFilter: (filter: string) => void;
-  priorityFilter: Priority | 'all';
-  setPriorityFilter: (filter: Priority | 'all') => void;
-  tasks: TaskType[];
-  categories: string[];
-  handleDeleteCategory: (category: string) => void;
-  isAddingCategory: boolean;
-  setIsAddingCategory: (isAdding: boolean) => void;
-  newCategoryName: string;
-  setNewCategoryName: (name: string) => void;
-  handleAddCategory: () => void;
-  syncStatus: SyncStatus;
-  handleLogout: () => void;
-  onClose?: () => void;
-}> = ({
-  setIsSettingsOpen,
-  setIsPanoramaOpen,
-  setIsSavedAnalysesOpen,
-  showArchived,
-  setShowArchived,
-  archivedTaskCount,
-  categoryFilter,
-  setCategoryFilter,
-  priorityFilter,
-  setPriorityFilter,
-  tasks,
-  categories,
-  handleDeleteCategory,
-  isAddingCategory,
-  setIsAddingCategory,
-  newCategoryName,
-  setNewCategoryName,
-  handleAddCategory,
-  syncStatus,
-  handleLogout,
-  onClose,
-}) => {
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex-grow">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-teal-600 dark:text-teal-400">Tarefas</h1>
-          {onClose ? null : (
-            <button onClick={() => setIsSettingsOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Configurações">
-              <SettingsIcon />
-            </button>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-              <ClipboardListIcon />
-              <span>Visualizações</span>
-            </h3>
-            <ul className="space-y-1">
-              <li>
-                <button
-                  onClick={() => { setShowArchived(false); onClose?.(); }}
-                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium ${!showArchived ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-                >
-                  Tarefas Ativas
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => { setShowArchived(true); onClose?.(); }}
-                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${showArchived ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-                >
-                  <span>Arquivadas</span>
-                  {archivedTaskCount > 0 && <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{archivedTaskCount}</span>}
-                </button>
-              </li>
-            </ul>
-          </div>
-          
-          <div>
-              <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                  <SparklesIcon />
-                  <span>Ferramentas IA</span>
-              </h3>
-              <ul className="space-y-1">
-                  <li>
-                      <button
-                          onClick={() => { setIsPanoramaOpen(true); onClose?.(); }}
-                          className="w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-2"
-                      >
-                          <SparklesIcon />
-                          <span>Análise com IA</span>
-                      </button>
-                  </li>
-                   <li>
-                      <button
-                          onClick={() => { setIsSavedAnalysesOpen(true); onClose?.(); }}
-                          className="w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-2"
-                      >
-                          <BookmarkIcon />
-                          <span>Análises Salvas</span>
-                      </button>
-                  </li>
-              </ul>
-          </div>
-
-          <div>
-            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-              <BellIcon />
-              <span>Prioridade</span>
-            </h3>
-            <ul className="space-y-1">
-              {Object.entries(priorityOptions).map(([key, label]) => (
-                <li key={key}>
-                  <button
-                    onClick={() => { setPriorityFilter(key as Priority | 'all'); onClose?.(); }}
-                    className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium ${priorityFilter === key ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-                  >
-                    {label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-              <TagIcon />
-              <span>Categorias</span>
-            </h3>
-            <ul className="space-y-1">
-              <li>
-                <button
-                  onClick={() => { setCategoryFilter('all'); onClose?.(); }}
-                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${categoryFilter === 'all' ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-                >
-                  <span>Todas as Categorias</span>
-                  <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{tasks.filter(t => !t.archived).length}</span>
-                </button>
-              </li>
-              {categories.map((cat) => (
-                <li key={cat} className="group flex items-center pr-1">
-                  <button
-                    onClick={() => { setCategoryFilter(cat); onClose?.(); }}
-                    className={`flex-grow text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${categoryFilter === cat ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-                  >
-                    <span className="truncate" title={cat}>{cat}</span>
-                    <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full ml-2 flex-shrink-0">
-                      {tasks.filter(t => t.category === cat && !t.archived).length}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => handleDeleteCategory(cat)}
-                    className="ml-1 p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-red-100 dark:hover:bg-red-900/30"
-                    title={`Excluir categoria "${cat}"`}
-                  >
-                    <TrashIcon />
-                  </button>
-                </li>
-              ))}
-              {isAddingCategory ? (
-                <li className="mt-2 p-1">
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="text"
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleAddCategory();
-                        if (e.key === 'Escape') setIsAddingCategory(false);
-                      }}
-                      className="flex-grow bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm text-gray-900 dark:text-white"
-                      placeholder="Nome da categoria"
-                      autoFocus
-                    />
-                    <button onClick={handleAddCategory} className="p-2 text-teal-500 hover:text-teal-600" title="Salvar">
-                      <CheckCircleIcon />
-                    </button>
-                    <button onClick={() => setIsAddingCategory(false)} className="p-2 text-gray-500 hover:text-gray-700" title="Cancelar">
-                      <XCircleIcon />
-                    </button>
-                  </div>
-                </li>
-              ) : (
-                <li className="mt-2">
-                  <button
-                    onClick={() => setIsAddingCategory(true)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors"
-                  >
-                    <PlusCircleIcon />
-                    <span>Nova Categoria</span>
-                  </button>
-                </li>
-              )}
-            </ul>
-          </div>
-        </div>
-      </div>
-      <div className="mt-auto flex-shrink-0 pt-4">
-        <SyncStatusIndicator status={syncStatus} />
-        <div className="flex items-center gap-2 mt-2">
-            <button
-              onClick={() => {
-                setIsSettingsOpen(true);
-                onClose?.();
-              }}
-              className="flex items-center justify-center gap-2 flex-1 text-sm text-gray-600 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors py-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-            >
-              <SettingsIcon className="h-5 w-5"/>
-              <span>Configurações</span>
-            </button>
-            <button
-              onClick={handleLogout}
-              className="flex items-center justify-center gap-2 flex-1 text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors py-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-            >
-              Sair
-            </button>
-          </div>
-      </div>
-    </div>
-  );
-};
-
-
 const App: React.FC = () => {
   const [view, setView] = useState<View>('home');
   const [user, setUser] = useState<User | null>(null);
@@ -477,6 +235,7 @@ const App: React.FC = () => {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
     'Notification' in window ? Notification.permission : 'denied'
   );
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 
   const [tasks, setTasks] = useState<TaskType[]>(() => {
     try {
@@ -529,6 +288,10 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Could not load theme from localStorage", error);
     }
+    // If no theme is saved, use the system preference
+    if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
     return 'light';
   });
 
@@ -543,12 +306,35 @@ const App: React.FC = () => {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    try {
-      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-    } catch (error) {
-       console.error("Could not save theme to localStorage", error);
-    }
   }, [theme]);
+
+  // Effect for listening to system theme changes
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
+      // Check if the user has manually set a theme. If so, don't override it.
+      const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (savedTheme) {
+        return; 
+      }
+      setTheme(e.matches ? 'dark' : 'light');
+    };
+
+    try {
+      mediaQuery.addEventListener('change', handleSystemThemeChange);
+    } catch (e) {
+      mediaQuery.addListener(handleSystemThemeChange);
+    }
+
+    return () => {
+      try {
+        mediaQuery.removeEventListener('change', handleSystemThemeChange);
+      } catch (e) {
+        mediaQuery.removeListener(handleSystemThemeChange);
+      }
+    };
+  }, []);
   
   // Debounced save effect
   useEffect(() => {
@@ -1129,6 +915,14 @@ const App: React.FC = () => {
     setIsLiveConversationOpen(false); // Close modal after creation
   };
 
+ const handleThemeChange = (newTheme: Theme) => {
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+    } catch (error) {
+       console.error("Could not save theme to localStorage", error);
+    }
+    setTheme(newTheme);
+  };
 
   const filteredTasks = tasks.filter((task) => {
     const isArchivedMatch = showArchived ? task.archived : !task.archived;
@@ -1280,7 +1074,7 @@ const App: React.FC = () => {
         onImport={handleImportData}
         onReset={handleResetData}
         theme={theme}
-        onThemeChange={setTheme}
+        onThemeChange={handleThemeChange}
         notificationPermission={notificationPermission}
         onRequestNotificationPermission={handleRequestNotificationPermission}
       />
@@ -1323,7 +1117,7 @@ const App: React.FC = () => {
             >
               <XIcon />
             </button>
-            <SidebarContent 
+            <Sidebar 
               {...sidebarProps}
               onClose={() => setIsDrawerOpen(false)}
             />
@@ -1334,12 +1128,12 @@ const App: React.FC = () => {
       <div className="lg:grid lg:grid-cols-[288px_1fr]">
         {/* Desktop Sidebar */}
         <aside className="hidden lg:block bg-white dark:bg-gray-800/50 border-r border-gray-200 dark:border-gray-700/50 p-6 h-screen sticky top-0 overflow-y-auto">
-           <SidebarContent {...sidebarProps} />
+           <Sidebar {...sidebarProps} />
         </aside>
 
         {/* Main Content */}
-        <main className="p-4 sm:p-6 lg:p-8">
-          <header className="flex justify-between items-center mb-6 gap-4">
+        <main className="lg:p-8">
+          <header className="sticky top-0 z-20 bg-gray-100/95 dark:bg-gray-900/95 backdrop-blur-sm lg:static lg:bg-transparent dark:lg:bg-transparent flex justify-between items-center gap-4 p-4 sm:p-6 lg:p-0 mb-6">
              <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
                 <button onClick={() => setIsDrawerOpen(true)} className="lg:hidden p-2 -ml-2 text-gray-600 dark:text-gray-300">
                     <MenuIcon />
@@ -1382,46 +1176,50 @@ const App: React.FC = () => {
             </div>
           </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-            {filteredTasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                categories={categories}
-                onUpdateTitle={handleUpdateTaskTitle}
-                onDeleteTask={handleDeleteTask}
-                onAddBlock={handleAddBlock}
-                onAddAttachment={handleAddAttachment}
-                onUpdateBlock={handleUpdateBlock}
-                onDeleteBlock={handleDeleteBlock}
-                onToggleSubItem={handleToggleSubItem}
-                onToggleAllSubItems={handleToggleAllSubItems}
-                onAddNestedSubItem={handleAddNestedSubItem}
-                onUpdateDetails={handleUpdateTaskDetails}
-                onToggleArchive={handleToggleArchiveTask}
-                onMoveBlock={handleMoveBlock}
-                onMoveTask={handleMoveTask}
-              />
-            ))}
-          </div>
-
-          {filteredTasks.length === 0 && (
-            <div className="text-center py-20">
-              <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300">Tudo limpo por aqui!</h3>
-              <p className="text-gray-500 dark:text-gray-400 mt-2">
-                {showArchived ? 'Você não tem tarefas arquivadas.' : 'Crie uma nova tarefa para começar.'}
-              </p>
-              {!showArchived && (
-                 <button
-                    onClick={handleAddTask}
-                    className="mt-6 flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold px-5 py-2.5 rounded-lg hover:bg-teal-700 transition-transform transform hover:scale-105 shadow-lg mx-auto"
-                >
-                    <PlusIcon />
-                    <span>Criar Primeira Tarefa</span>
-                </button>
-              )}
+          <div className="px-4 sm:px-6 lg:px-0 pb-24 lg:pb-0">
+            <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 ${draggedTaskId ? '[&>*]:opacity-50' : ''}`}>
+              {filteredTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  categories={categories}
+                  onUpdateTitle={handleUpdateTaskTitle}
+                  onDeleteTask={handleDeleteTask}
+                  onAddBlock={handleAddBlock}
+                  onAddAttachment={handleAddAttachment}
+                  onUpdateBlock={handleUpdateBlock}
+                  onDeleteBlock={handleDeleteBlock}
+                  onToggleSubItem={handleToggleSubItem}
+                  onToggleAllSubItems={handleToggleAllSubItems}
+                  onAddNestedSubItem={handleAddNestedSubItem}
+                  onUpdateDetails={handleUpdateTaskDetails}
+                  onToggleArchive={handleToggleArchiveTask}
+                  onMoveBlock={handleMoveBlock}
+                  onMoveTask={handleMoveTask}
+                  draggedTaskId={draggedTaskId}
+                  onSetDraggedTaskId={setDraggedTaskId}
+                />
+              ))}
             </div>
-          )}
+
+            {filteredTasks.length === 0 && (
+              <div className="text-center py-20">
+                <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300">Tudo limpo por aqui!</h3>
+                <p className="text-gray-500 dark:text-gray-400 mt-2">
+                  {showArchived ? 'Você não tem tarefas arquivadas.' : 'Crie uma nova tarefa para começar.'}
+                </p>
+                {!showArchived && (
+                  <button
+                      onClick={handleAddTask}
+                      className="mt-6 flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold px-5 py-2.5 rounded-lg hover:bg-teal-700 transition-transform transform hover:scale-105 shadow-lg mx-auto"
+                  >
+                      <PlusIcon />
+                      <span>Criar Primeira Tarefa</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </main>
       </div>
 

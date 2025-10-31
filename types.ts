@@ -1,4 +1,5 @@
 export type Priority = 'none' | 'low' | 'medium' | 'high' | 'urgent';
+export type SyncStatus = 'syncing' | 'saved' | 'offline' | 'error';
 
 export interface SubItemBlock {
   id: string;
