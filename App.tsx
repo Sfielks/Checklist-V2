@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority } from './types';
 import TaskCard from './components/TaskCard';
-import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, MenuIcon, XIcon, SettingsIcon, AppleIcon } from './components/Icons';
+import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, AppleIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon } from './components/Icons';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SettingsModal from './components/SettingsModal';
 
@@ -48,10 +48,81 @@ const initialTasks: TaskType[] = [
   },
 ];
 
-const LOCAL_STORAGE_KEY = 'checklist-app-tasks';
+const LOCAL_STORAGE_KEY = 'checklist-app-tasks-guest';
+const CLOUD_STORAGE_KEY_PREFIX = 'checklist-app-cloud-';
 const THEME_STORAGE_KEY = 'checklist-app-theme';
 
 type Theme = 'light' | 'dark';
+type View = 'home' | 'checklist';
+type User = { id: string; name: string };
+type SyncStatus = 'syncing' | 'saved' | 'offline' | 'error';
+
+
+// Mock Cloud Storage API
+const cloudStorage = {
+  saveTasks: async (userId: string, tasks: TaskType[]): Promise<void> => {
+    console.log(`Simulating save to cloud for user ${userId}...`);
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
+    try {
+      localStorage.setItem(`${CLOUD_STORAGE_KEY_PREFIX}${userId}`, JSON.stringify(tasks));
+      console.log('Cloud save successful.');
+    } catch (error) {
+      console.error('Cloud save failed:', error);
+      throw new Error('Failed to save to cloud');
+    }
+  },
+  loadTasks: async (userId: string): Promise<TaskType[] | null> => {
+    console.log(`Simulating load from cloud for user ${userId}...`);
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
+    try {
+      const savedTasks = localStorage.getItem(`${CLOUD_STORAGE_KEY_PREFIX}${userId}`);
+      if (savedTasks) {
+        console.log('Cloud load successful.');
+        return JSON.parse(savedTasks);
+      }
+      console.log('No data found in cloud for this user.');
+      return null;
+    } catch (error) {
+      console.error('Cloud load failed:', error);
+      throw new Error('Failed to load from cloud');
+    }
+  },
+};
+
+const SyncStatusIndicator: React.FC<{ status: SyncStatus }> = ({ status }) => {
+    const statusConfig: Record<SyncStatus, { icon: React.ReactNode; text: string; color: string }> = {
+      syncing: {
+        icon: <SpinnerIcon />,
+        text: 'Sincronizando...',
+        color: 'text-blue-500 dark:text-blue-400',
+      },
+      saved: {
+        icon: <CloudCheckIcon />,
+        text: 'Salvo na nuvem',
+        color: 'text-teal-600 dark:text-teal-400',
+      },
+      offline: {
+        icon: <CloudOffIcon />,
+        text: 'Modo Offline',
+        color: 'text-gray-500 dark:text-gray-400',
+      },
+      error: {
+        icon: <ExclamationCircleIcon />,
+        text: 'Falha na sincronização',
+        color: 'text-red-500 dark:text-red-400',
+      },
+    };
+  
+  const { icon, text, color } = statusConfig[status];
+
+  return (
+    <div className={`flex items-center gap-2 text-sm font-medium ${color} transition-colors duration-300`}>
+      <div className="flex-shrink-0">{icon}</div>
+      <span className="hidden sm:inline">{text}</span>
+    </div>
+  );
+};
+
 
 // Recursive helper functions for deep state manipulation
 const mapContentTree = (content: ContentBlock[], targetId: string, transform: (block: SubItemBlock) => SubItemBlock): [ContentBlock[], boolean] => {
@@ -135,6 +206,9 @@ const HomeScreen = ({ onAppleLogin, onGuestLogin }: { onAppleLogin: () => void; 
       <p className="text-gray-500 dark:text-gray-400 mt-4 text-lg sm:text-xl">
         A sua ferramenta definitiva para organizar tarefas complexas, projetos e ideias. Crie checklists detalhados com subtarefas, notas, prioridades e muito mais.
       </p>
+       <p className="text-teal-500 dark:text-teal-400 mt-6 text-lg font-semibold">
+        Faça login para salvar e sincronizar suas tarefas na nuvem!
+      </p>
       <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4">
         <button
           onClick={onAppleLogin}
@@ -155,12 +229,19 @@ const HomeScreen = ({ onAppleLogin, onGuestLogin }: { onAppleLogin: () => void; 
 );
 
 const App: React.FC = () => {
-  const [view, setView] = useState<'home' | 'checklist'>('home');
-  const [user, setUser] = useState<{ name: string } | null>(null);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [view, setView] = useState<View>('home');
+  const [user, setUser] = useState<User | null>(null);
   const [taskToDeleteId, setTaskToDeleteId] = useState<string | null>(null);
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    'Notification' in window ? Notification.permission : 'denied'
+  );
 
   const [tasks, setTasks] = useState<TaskType[]>(() => {
     try {
@@ -178,6 +259,19 @@ const App: React.FC = () => {
      {
       console.error("Could not load tasks from localStorage", error);
       return initialTasks;
+    }
+  });
+  
+  const [categories, setCategories] = useState<string[]>(() => {
+    try {
+      const savedTasks = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+      const tasksToParse: TaskType[] = savedTasks ? JSON.parse(savedTasks) : initialTasks;
+      const initialCategories = Array.from(new Set(tasksToParse.map((t: TaskType) => t.category).filter((c?: string): c is string => !!c)));
+      return initialCategories.sort();
+    } catch (error) {
+      console.error("Could not load categories from tasks", error);
+      const initialCategories = Array.from(new Set(initialTasks.map(t => t.category).filter((c?: string): c is string => !!c)));
+      return initialCategories.sort();
     }
   });
 
@@ -203,40 +297,104 @@ const App: React.FC = () => {
        console.error("Could not save theme to localStorage", error);
     }
   }, [theme]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
-    } catch (error) {
-      console.error("Could not save tasks to localStorage", error);
-    }
-  }, [tasks]);
   
+  // Debounced save effect
   useEffect(() => {
-    if (isMobileMenuOpen) {
-        document.body.style.overflow = 'hidden';
-    } else {
-        document.body.style.overflow = 'unset';
+    const handler = setTimeout(() => {
+      if (user) {
+        setSyncStatus('syncing');
+        cloudStorage.saveTasks(user.id, tasks)
+          .then(() => setSyncStatus('saved'))
+          .catch(() => setSyncStatus('error'));
+      } else {
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
+          setSyncStatus('offline');
+        } catch (error) {
+          console.error("Could not save tasks to localStorage", error);
+          setSyncStatus('error');
+        }
+      }
+    }, 1000);
+
+    return () => clearTimeout(handler);
+  }, [tasks, user]);
+  
+  // Effect for checking due tasks and sending notifications
+  useEffect(() => {
+    if (notificationPermission !== 'granted' || view !== 'checklist') return;
+
+    const checkInterval = setInterval(() => {
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      const notifiedTasksKey = `notified-tasks-${todayStr}`;
+      
+      let notifiedTaskIds: string[];
+      try {
+        notifiedTaskIds = JSON.parse(localStorage.getItem(notifiedTasksKey) || '[]');
+      } catch {
+        notifiedTaskIds = [];
+      }
+
+      tasks.forEach(task => {
+        if (task.dueDate === todayStr && !task.archived && !notifiedTaskIds.includes(task.id)) {
+          new Notification('Tarefa vence hoje!', {
+            body: `Não se esqueça de concluir: "${task.title}"`,
+            icon: '/vite.svg',
+          });
+          notifiedTaskIds.push(task.id);
+        }
+      });
+      
+      try {
+        localStorage.setItem(notifiedTasksKey, JSON.stringify(notifiedTaskIds));
+      } catch (error) {
+        console.error("Could not save notified tasks to localStorage", error);
+      }
+    }, 60 * 1000); // Check every minute
+
+    return () => clearInterval(checkInterval);
+  }, [tasks, notificationPermission, view]);
+
+  const loadAndSyncTasks = async (userId: string) => {
+    setSyncStatus('syncing');
+    try {
+        const cloudTasks = await cloudStorage.loadTasks(userId);
+        if (cloudTasks) {
+            setTasks(cloudTasks.map((task: any) => ({ ...task, content: migrateSubItems(task.content || []) })));
+            const cloudCategories = Array.from(new Set(cloudTasks.map((t: TaskType) => t.category).filter((c?: string): c is string => !!c)));
+            setCategories(cloudCategories.sort());
+        } else {
+            // New user, migrate guest tasks to cloud
+            await cloudStorage.saveTasks(userId, tasks);
+        }
+        setSyncStatus('saved');
+    } catch (e) {
+        setSyncStatus('error');
+        alert("Não foi possível carregar os dados da nuvem. Verifique sua conexão e tente novamente.");
     }
-    return () => {
-        document.body.style.overflow = 'unset';
-    };
-  }, [isMobileMenuOpen]);
+  };
 
   const handleAppleLogin = () => {
-    setUser({ name: 'Usuário Apple' });
+    const mockUser = { id: 'apple-user-123', name: 'Usuário Apple' };
+    setUser(mockUser);
+    loadAndSyncTasks(mockUser.id);
     setView('checklist');
   };
 
   const handleGuestLogin = () => {
     setUser(null);
+    setSyncStatus('offline');
     setView('checklist');
   };
 
   const handleLogout = () => {
     setUser(null);
+    setSyncStatus('offline');
+    // Reload guest tasks
+    const savedTasks = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+    setTasks(savedTasks ? JSON.parse(savedTasks) : initialTasks);
     setView('home');
-    setIsMobileMenuOpen(false);
   };
 
   const handleAddTask = () => {
@@ -246,7 +404,7 @@ const App: React.FC = () => {
       content: [],
       priority: 'none',
       dueDate: '',
-      category: '',
+      category: categoryFilter !== 'all' ? categoryFilter : '',
       archived: false,
     };
     setTasks([newTask, ...tasks]);
@@ -283,8 +441,17 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTaskDetails = (taskId: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category' | 'color'>>) => {
+    const finalDetails = { ...details };
+    if (typeof finalDetails.category === 'string') {
+        const trimmedCategory = finalDetails.category.trim();
+        if (trimmedCategory && !categories.includes(trimmedCategory)) {
+            setCategories(prev => [...prev, trimmedCategory].sort());
+        }
+        finalDetails.category = trimmedCategory;
+    }
+
     setTasks(tasks.map(task => 
-        task.id === taskId ? { ...task, ...details } : task
+        task.id === taskId ? { ...task, ...finalDetails } : task
     ));
   };
   
@@ -495,364 +662,415 @@ const App: React.FC = () => {
     reader.onload = (e) => {
       try {
         const text = e.target?.result;
-        if (typeof text !== 'string') {
-          throw new Error("File content is not a string");
+        if (typeof text === 'string') {
+          const importedTasks: TaskType[] = JSON.parse(text);
+          // Basic validation
+          if (Array.isArray(importedTasks) && importedTasks.every(t => 'id' in t && 'title' in t)) {
+            const migratedTasks = importedTasks.map(task => ({
+                ...task,
+                archived: task.archived || false,
+                content: migrateSubItems(task.content || [])
+            }));
+            setTasks(migratedTasks);
+            const importedCategories = Array.from(new Set(migratedTasks.map(t => t.category).filter(Boolean)));
+            setCategories(importedCategories.sort());
+            setIsSettingsOpen(false);
+          } else {
+            throw new Error("Invalid file format");
+          }
         }
-        const importedTasks = JSON.parse(text);
-        
-        if (!Array.isArray(importedTasks) || (importedTasks.length > 0 && (typeof importedTasks[0].id === 'undefined' || typeof importedTasks[0].title === 'undefined'))) {
-          throw new Error("Invalid file format");
-        }
-        
-        setTasks(importedTasks.map((task: any) => ({ 
-            ...task, 
-            archived: task.archived || false,
-            content: migrateSubItems(task.content || [])
-        })));
-
-        setIsSettingsOpen(false);
-        alert("Dados importados com sucesso!");
-
       } catch (error) {
         console.error("Failed to import data", error);
-        alert("Ocorreu um erro ao importar os dados. Verifique se o arquivo é um JSON válido exportado deste aplicativo.");
-      } finally {
-        if (event.target) {
-            event.target.value = '';
-        }
+        alert("Ocorreu um erro ao importar os dados. Verifique o formato do arquivo.");
       }
     };
     reader.readAsText(file);
   };
-  
-  const handleRequestReset = () => {
-      setIsSettingsOpen(false);
-      setShowResetConfirmation(true);
-  }
 
+  const handleResetData = () => {
+      setShowResetConfirmation(true);
+  };
+  
   const handleConfirmReset = () => {
     setTasks(initialTasks);
+    const initialCategories = Array.from(new Set(initialTasks.map(t => t.category).filter(Boolean)));
+    setCategories(initialCategories.sort());
+    setPriorityFilter('all');
+    setCategoryFilter('all');
+    setStatusFilter('all');
     setShowResetConfirmation(false);
+    setIsSettingsOpen(false);
+    // Note: This doesn't clear cloud data for logged-in users, only local state.
+    // For a full reset, we'd need a cloudStorage.delete() method.
   };
 
-  const handleCancelReset = () => {
-    setShowResetConfirmation(false);
+  const handleRequestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+    }
   };
 
-    const countSubItems = (items: ContentBlock[]): { total: number; completed: number } => {
-        let total = 0;
-        let completed = 0;
-        for (const item of items) {
-            if (item.type === 'subitem') {
-                total++;
-                if (item.completed) completed++;
-                const childrenCount = countSubItems(item.children);
-                total += childrenCount.total;
-                completed += childrenCount.completed;
-            }
-        }
-        return { total, completed };
-    };
-
-  const getTaskCompletionStatus = (task: TaskType): 'completed' | 'in-progress' => {
-        const subItems = task.content.filter(b => b.type === 'subitem') as SubItemBlock[];
-        if (subItems.length === 0) {
-          const textBlocks = task.content.filter(b => b.type === 'text');
-          if (textBlocks.length > 0 && subItems.length === 0) return 'in-progress';
-          return 'in-progress';
-        }
-
-        const { total, completed } = countSubItems(subItems);
-        return total > 0 && completed === total ? 'completed' : 'in-progress';
+  const handleAddCategory = () => {
+    const trimmedName = newCategoryName.trim();
+    if (trimmedName && !categories.includes(trimmedName)) {
+      setCategories(prev => [...prev, trimmedName].sort());
+    }
+    setNewCategoryName('');
+    setIsAddingCategory(false);
   };
   
-  const allCategories = ['all', ...Array.from(new Set(tasks.map(t => t.category).filter((c): c is string => !!c)))];
+  const handleDeleteCategory = (categoryName: string) => {
+    setCategoryToDelete(categoryName);
+  };
 
-  const filteredTasks = tasks.filter(task => {
-      if (task.archived !== showArchived) {
-          return false;
+  const handleConfirmDeleteCategory = () => {
+    if (!categoryToDelete) return;
+
+    setTasks(prevTasks =>
+      prevTasks.map(task =>
+        task.category === categoryToDelete ? { ...task, category: '' } : task
+      )
+    );
+
+    setCategories(prevCategories =>
+      prevCategories.filter(c => c !== categoryToDelete)
+    );
+
+    if (categoryFilter === categoryToDelete) {
+      setCategoryFilter('all');
+    }
+    
+    setCategoryToDelete(null);
+  };
+
+  const handleCancelDeleteCategory = () => {
+    setCategoryToDelete(null);
+  };
+
+  const filteredTasks = tasks.filter((task) => {
+    const isArchivedMatch = showArchived ? task.archived : !task.archived;
+    const isPriorityMatch = priorityFilter === 'all' || task.priority === priorityFilter;
+    const isCategoryMatch = categoryFilter === 'all' || task.category === categoryFilter;
+
+    const isStatusMatch = () => {
+      if (statusFilter === 'all') return true;
+      
+      const subItems = task.content.filter(c => c.type === 'subitem') as SubItemBlock[];
+      if (subItems.length === 0) {
+        // Tasks without subitems are considered 'in-progress'
+        return statusFilter === 'in-progress';
       }
-      if (priorityFilter !== 'all' && (task.priority || 'none') !== priorityFilter) {
-          return false;
-      }
-       if (categoryFilter !== 'all' && task.category !== categoryFilter) {
-          return false;
-      }
-      if (statusFilter !== 'all') {
-          const status = getTaskCompletionStatus(task);
-          if (status !== statusFilter) {
-              return false;
-          }
-      }
-      return true;
+      
+      const allCompleted = subItems.every(item => item.completed);
+      
+      if (statusFilter === 'completed') return allCompleted;
+      if (statusFilter === 'in-progress') return !allCompleted;
+      
+      return false;
+    };
+    
+    return isArchivedMatch && isPriorityMatch && isCategoryMatch && isStatusMatch();
   });
 
-  const handleClearFilters = () => {
-    setPriorityFilter('all');
-    setStatusFilter('all');
-  }
-  
+  const archivedTaskCount = tasks.filter(t => t.archived).length;
+
   if (view === 'home') {
     return <HomeScreen onAppleLogin={handleAppleLogin} onGuestLogin={handleGuestLogin} />;
   }
-
-  const categoryNav = (
-    <nav className="flex flex-col space-y-2">
-        <button 
-            onClick={() => setCategoryFilter('all')}
-            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                categoryFilter === 'all' ? 'bg-teal-500/20 text-teal-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
-            }`}
+  
+  const FilterModal = () => (
+    <div 
+        className="fixed inset-0 bg-black bg-opacity-70 z-40 flex justify-center items-end sm:items-center"
+        onClick={() => setIsFilterModalOpen(false)}
+    >
+        <div 
+            className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-700 p-6 animate-slide-up"
+            onClick={e => e.stopPropagation()}
         >
-            <ClipboardListIcon />
-            <span>Todas as Tarefas</span>
-        </button>
-        {allCategories.filter(c => c !== 'all').map(category => (
-            <button 
-                key={category}
-                onClick={() => setCategoryFilter(category)}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    categoryFilter === category ? 'bg-teal-500/20 text-teal-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
-                }`}
-            >
-                <TagIcon />
-                <span>{category}</span>
-            </button>
-        ))}
-    </nav>
-  );
-
-  const filterControls = (isMobile: boolean) => (
-    <>
-      <div className={isMobile ? "flex flex-col gap-4" : "flex-1 min-w-[150px]"}>
-        <label htmlFor={isMobile ? "priority-filter-mobile" : "priority-filter"} className={isMobile ? "text-gray-700 dark:text-gray-300 font-medium mb-1" : "sr-only"}>Prioridade</label>
-        <select
-            id={isMobile ? "priority-filter-mobile" : "priority-filter"}
-            value={priorityFilter}
-            onChange={e => setPriorityFilter(e.target.value as Priority | 'all')}
-            className="w-full bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
-        >
-            {Object.entries(priorityOptions).map(([key, value]) => (
-                <option key={key} value={key}>{value}</option>
-            ))}
-        </select>
-      </div>
-      <div className={isMobile ? "flex flex-col gap-4" : "flex-1 min-w-[150px]"}>
-        <label htmlFor={isMobile ? "status-filter-mobile" : "status-filter"} className={isMobile ? "text-gray-700 dark:text-gray-300 font-medium mb-1" : "sr-only"}>Status</label>
-        <select
-            id={isMobile ? "status-filter-mobile" : "status-filter"}
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as any)}
-            className="w-full bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
-        >
-            {Object.entries(statusOptions).map(([key, value]) => (
-                <option key={key} value={key}>{value}</option>
-            ))}
-        </select>
-      </div>
-    </>
-  );
-
-  return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white font-sans transition-colors duration-300">
-      <header className="bg-white/80 dark:bg-gray-800/50 backdrop-blur-sm sticky top-0 z-30 p-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold text-teal-600 dark:text-teal-400">Checklist v2</h1>
-              <button
-                  onClick={() => setIsSettingsOpen(true)}
-                  className="text-gray-500 dark:text-gray-400 hover:text-teal-500 dark:hover:text-teal-400 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700/50"
-                  title="Configurações"
-                  aria-label="Abrir configurações"
-              >
-                  <SettingsIcon />
-              </button>
-            </div>
-            <div className="hidden md:flex items-center gap-4">
-              {user ? (
-                <>
-                  <span className="text-gray-700 dark:text-gray-300">Olá, {user.name}</span>
-                  <button onClick={handleLogout} className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors">
-                    Sair
-                  </button>
-                </>
-              ) : (
-                !showArchived && (
-                  <button
-                      onClick={handleAddTask}
-                      className="flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105"
-                  >
-                      <PlusIcon />
-                      <span>Nova Tarefa</span>
-                  </button>
-                )
-              )}
-            </div>
-            <button
-                onClick={() => setIsMobileMenuOpen(true)}
-                className="md:hidden p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-                aria-label="Abrir menu"
-            >
-                <MenuIcon />
-            </button>
-        </div>
-      </header>
-      
-      <div 
-        className={`fixed inset-0 bg-black/60 z-40 transition-opacity md:hidden ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        onClick={() => setIsMobileMenuOpen(false)}
-        aria-hidden="true"
-      ></div>
-    
-      <div className={`fixed top-0 left-0 h-full w-full max-w-xs bg-white dark:bg-gray-800 z-50 transform transition-transform duration-300 ease-in-out md:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-4 flex flex-col h-full overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-                 {user ? (
-                    <span className="text-lg font-semibold text-teal-600 dark:text-teal-400">Olá, {user.name}</span>
-                ) : (
-                    <h2 className="text-xl font-bold text-teal-600 dark:text-teal-400">Menu</h2>
-                )}
-                <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Fechar menu">
+                <h3 className="text-xl font-bold text-teal-600 dark:text-teal-400 flex items-center gap-2">
+                    <FilterIcon />
+                    <span>Filtrar Tarefas</span>
+                </h3>
+                <button onClick={() => setIsFilterModalOpen(false)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Fechar filtros">
                     <XIcon />
                 </button>
             </div>
             
-            <div className="border-y border-gray-200 dark:border-gray-700 py-4 my-4">
-                <h3 className="text-lg font-semibold text-teal-600 dark:text-teal-400 mb-4">Categorias</h3>
-                {categoryNav}
-            </div>
-            
-            <div className="flex flex-col gap-4 flex-grow">
-                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-semibold">
-                    <FilterIcon />
-                    <span>Filtrar por:</span>
-                </div>
-                {filterControls(true)}
-                <div className="mt-auto pt-4">
-                  <button
-                      onClick={handleClearFilters}
-                      className="w-full flex items-center justify-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md py-2 mb-4"
-                  >
-                      <XCircleIcon />
-                      <span>Limpar Filtros</span>
-                  </button>
-                  {user && (
-                    <button onClick={handleLogout} className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
-                        Sair
-                    </button>
-                  )}
-                </div>
-            </div>
-        </div>
-      </div>
-
-      <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-        <div className="flex flex-col md:flex-row gap-8">
-            <aside className="w-full md:w-64 flex-shrink-0 hidden md:block">
-                <div className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700/50 sticky top-24">
-                    <h2 className="text-lg font-semibold text-teal-600 dark:text-teal-400 mb-4">Categorias</h2>
-                    {categoryNav}
-                </div>
-            </aside>
-
-            <div className="flex-1 min-w-0">
-                <div className="flex justify-center mb-6">
-                    <div className="bg-white dark:bg-gray-800 p-1 rounded-lg flex items-center border border-gray-200 dark:border-gray-700/50">
-                        <button
-                            onClick={() => setShowArchived(false)}
-                            className={`px-6 py-2 text-sm font-semibold rounded-md transition-colors ${!showArchived ? 'bg-teal-500 text-white shadow' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
-                        >
-                            Ativas
-                        </button>
-                        <button
-                            onClick={() => setShowArchived(true)}
-                            className={`px-6 py-2 text-sm font-semibold rounded-md transition-colors ${showArchived ? 'bg-teal-500 text-white shadow' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
-                        >
-                            Arquivadas
-                        </button>
-                    </div>
-                </div>
-
-                <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-4 rounded-lg mb-6 border border-gray-200 dark:border-gray-700/50 hidden md:flex flex-col sm:flex-row items-start sm:items-center gap-4 flex-wrap">
-                    <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-semibold">
-                        <FilterIcon />
-                        <span>Filtrar por:</span>
-                    </div>
-                    {filterControls(false)}
-                    <button
-                        onClick={handleClearFilters}
-                        className="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+            <div className="space-y-6">
+                <div>
+                    <label htmlFor="priority-filter-modal" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Prioridade</label>
+                    <select
+                        id="priority-filter-modal"
+                        value={priorityFilter}
+                        onChange={(e) => setPriorityFilter(e.target.value as Priority | 'all')}
+                        className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
                     >
-                        <XCircleIcon />
-                        <span>Limpar</span>
-                    </button>
-                </div>
-                
-                {filteredTasks.length > 0 ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {filteredTasks.map((task) => (
-                            <TaskCard
-                                key={task.id}
-                                task={task}
-                                onUpdateTitle={handleUpdateTaskTitle}
-                                onDeleteTask={handleDeleteTask}
-                                onAddBlock={handleAddBlock}
-                                onUpdateBlock={handleUpdateBlock}
-                                onDeleteBlock={handleDeleteBlock}
-                                onToggleSubItem={handleToggleSubItem}
-                                onAddNestedSubItem={handleAddNestedSubItem}
-                                onUpdateDetails={handleUpdateTaskDetails}
-                                onToggleArchive={handleToggleArchiveTask}
-                                onMoveBlock={handleMoveBlock}
-                            />
+                        {Object.entries(priorityOptions).map(([key, label]) => (
+                            <option key={key} value={key}>{label}</option>
                         ))}
-                    </div>
-                ) : (
-                    <div className="text-center py-16 px-6 bg-gray-50 dark:bg-gray-800 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700">
-                        <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300">
-                           {tasks.length > 0 ? "Nenhuma tarefa corresponde aos seus filtros" : (showArchived ? "Nenhuma tarefa arquivada" : "Nenhuma tarefa encontrada")}
-                        </h3>
-                        <p className="text-gray-500 mt-2">
-                           {tasks.length > 0 ? "Tente ajustar ou limpar os filtros." : (showArchived ? "Quando você arquivar uma tarefa, ela aparecerá aqui." : "Clique no botão '+' para começar a organizar seu trabalho.")}
-                        </p>
-                    </div>
-                )}
+                    </select>
+                </div>
+
+                <div>
+                    <label htmlFor="status-filter-modal" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status</label>
+                    <select
+                        id="status-filter-modal"
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value as any)}
+                        className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
+                    >
+                        {Object.entries(statusOptions).map(([key, label]) => (
+                            <option key={key} value={key}>{label}</option>
+                        ))}
+                    </select>
+                </div>
             </div>
         </div>
-      </main>
+    </div>
+  );
 
-      {!showArchived && (
-        <button
-            onClick={handleAddTask}
-            className="md:hidden fixed bottom-6 right-6 bg-teal-500 hover:bg-teal-600 text-white p-4 rounded-full shadow-lg transition-transform transform hover:scale-110 z-20"
-            aria-label="Adicionar Nova Tarefa"
-        >
-            <PlusIcon />
-        </button>
-      )}
+  return (
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 transition-colors duration-300">
+      
+      <ConfirmationDialog
+        isOpen={!!taskToDeleteId}
+        onClose={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+        title="Excluir Tarefa"
+        message="Tem certeza de que deseja excluir esta tarefa permanentemente? Esta ação não pode ser desfeita."
+      />
+
+      <ConfirmationDialog
+        isOpen={!!categoryToDelete}
+        onClose={handleCancelDeleteCategory}
+        onConfirm={handleConfirmDeleteCategory}
+        title="Excluir Categoria"
+        message={`Tem certeza de que deseja excluir a categoria "${categoryToDelete}"? Esta ação removerá a categoria de todas as tarefas associadas, mas não excluirá as tarefas em si.`}
+      />
+
+      <ConfirmationDialog
+          isOpen={showResetConfirmation}
+          onClose={() => setShowResetConfirmation(false)}
+          onConfirm={handleConfirmReset}
+          title="Redefinir Aplicativo"
+          message="Tem certeza de que deseja excluir TODOS os dados? Esta ação é irreversível."
+      />
+
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onExport={handleExportData}
         onImport={handleImportData}
-        onReset={handleRequestReset}
+        onReset={handleResetData}
         theme={theme}
         onThemeChange={setTheme}
+        notificationPermission={notificationPermission}
+        onRequestNotificationPermission={handleRequestNotificationPermission}
       />
-      <ConfirmationDialog
-        isOpen={!!taskToDeleteId}
-        onClose={handleCancelDelete}
-        onConfirm={handleConfirmDelete}
-        title="Confirmar Exclusão"
-        message="Você tem certeza de que deseja excluir permanentemente esta tarefa? Esta ação não pode ser desfeita."
-      />
-       <ConfirmationDialog
-        isOpen={showResetConfirmation}
-        onClose={handleCancelReset}
-        onConfirm={handleConfirmReset}
-        title="Confirmar Redefinição"
-        message="Você tem certeza de que deseja excluir TODAS as tarefas? Esta ação é irreversível e removerá todos os dados."
-      />
+
+      {isFilterModalOpen && <FilterModal />}
+      
+      <div className="flex">
+        {/* Sidebar */}
+        <aside className="hidden lg:block w-72 bg-white dark:bg-gray-800/50 border-r border-gray-200 dark:border-gray-700/50 p-6 min-h-screen sticky top-0">
+           <div className="flex items-center justify-between mb-8">
+                <h1 className="text-2xl font-bold text-teal-600 dark:text-teal-400">Tarefas</h1>
+                 <button onClick={() => setIsSettingsOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Configurações">
+                    <SettingsIcon />
+                </button>
+           </div>
+
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                <ClipboardListIcon />
+                <span>Visualizações</span>
+              </h3>
+              <ul className="space-y-1">
+                 <li>
+                  <button
+                    onClick={() => setShowArchived(false)}
+                    className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium ${!showArchived ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                  >
+                    Tarefas Ativas
+                  </button>
+                </li>
+                <li>
+                  <button
+                    onClick={() => setShowArchived(true)}
+                    className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${showArchived ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                  >
+                    <span>Arquivadas</span>
+                    {archivedTaskCount > 0 && <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{archivedTaskCount}</span>}
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                <TagIcon />
+                <span>Categorias</span>
+              </h3>
+              <ul className="space-y-1">
+                <li>
+                  <button
+                    onClick={() => setCategoryFilter('all')}
+                    className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${
+                      categoryFilter === 'all'
+                        ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300'
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <span>Todas as Categorias</span>
+                    <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{tasks.filter(t => !t.archived).length}</span>
+                  </button>
+                </li>
+                {categories.map((cat) => (
+                  <li key={cat} className="group flex items-center pr-1">
+                    <button
+                      onClick={() => setCategoryFilter(cat)}
+                      className={`flex-grow text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${
+                        categoryFilter === cat
+                          ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300'
+                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      <span className="truncate" title={cat}>{cat}</span>
+                      <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full ml-2 flex-shrink-0">
+                        {tasks.filter(t => t.category === cat && !t.archived).length}
+                      </span>
+                    </button>
+                     <button 
+                        onClick={() => handleDeleteCategory(cat)}
+                        className="ml-1 p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-red-100 dark:hover:bg-red-900/30"
+                        title={`Excluir categoria "${cat}"`}
+                    >
+                        <TrashIcon />
+                    </button>
+                  </li>
+                ))}
+                {isAddingCategory ? (
+                  <li className="mt-2 p-1">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        onKeyDown={(e) => {
+                           if (e.key === 'Enter') handleAddCategory();
+                           if (e.key === 'Escape') setIsAddingCategory(false);
+                        }}
+                        className="flex-grow bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm text-gray-900 dark:text-white"
+                        placeholder="Nome da categoria"
+                        autoFocus
+                      />
+                      <button onClick={handleAddCategory} className="p-2 text-teal-500 hover:text-teal-600" title="Salvar">
+                        <CheckCircleIcon />
+                      </button>
+                      <button onClick={() => setIsAddingCategory(false)} className="p-2 text-gray-500 hover:text-gray-700" title="Cancelar">
+                        <XCircleIcon />
+                      </button>
+                    </div>
+                  </li>
+                ) : (
+                  <li className="mt-2">
+                    <button
+                      onClick={() => setIsAddingCategory(true)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors"
+                    >
+                      <PlusCircleIcon />
+                      <span>Nova Categoria</span>
+                    </button>
+                  </li>
+                )}
+              </ul>
+            </div>
+          </div>
+          <div className="mt-auto absolute bottom-6 left-6 right-6">
+                <SyncStatusIndicator status={syncStatus} />
+                <button 
+                    onClick={handleLogout}
+                    className="w-full mt-2 text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors py-2 rounded-md text-center"
+                >
+                    Sair
+                </button>
+            </div>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">
+          <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+             <div>
+                <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200">
+                  {showArchived ? 'Tarefas Arquivadas' : 'Suas Tarefas'}
+                </h1>
+                <p className="text-gray-500 dark:text-gray-400 mt-1">
+                    {filteredTasks.length > 0
+                        ? `${filteredTasks.length} tarefa${filteredTasks.length > 1 ? 's' : ''} encontrada${filteredTasks.length > 1 ? 's' : ''}.`
+                        : 'Nenhuma tarefa encontrada.'}
+                </p>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                    onClick={() => setIsFilterModalOpen(true)}
+                    className="lg:hidden flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-sm"
+                >
+                    <FilterIcon />
+                    <span>Filtros</span>
+                </button>
+                {!showArchived && (
+                    <button
+                        onClick={handleAddTask}
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-teal-700 transition-transform transform hover:scale-105 shadow-lg"
+                    >
+                        <PlusIcon />
+                        <span>Nova Tarefa</span>
+                    </button>
+                )}
+            </div>
+          </header>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+            {filteredTasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onUpdateTitle={handleUpdateTaskTitle}
+                onDeleteTask={handleDeleteTask}
+                onAddBlock={handleAddBlock}
+                onUpdateBlock={handleUpdateBlock}
+                onDeleteBlock={handleDeleteBlock}
+                onToggleSubItem={handleToggleSubItem}
+                onAddNestedSubItem={handleAddNestedSubItem}
+                onUpdateDetails={handleUpdateTaskDetails}
+                onToggleArchive={handleToggleArchiveTask}
+                onMoveBlock={handleMoveBlock}
+              />
+            ))}
+          </div>
+
+          {filteredTasks.length === 0 && (
+            <div className="text-center py-20">
+              <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300">Tudo limpo por aqui!</h3>
+              <p className="text-gray-500 dark:text-gray-400 mt-2">
+                {showArchived ? 'Você não tem tarefas arquivadas.' : 'Crie uma nova tarefa para começar.'}
+              </p>
+              {!showArchived && (
+                 <button
+                    onClick={handleAddTask}
+                    className="mt-6 flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold px-5 py-2.5 rounded-lg hover:bg-teal-700 transition-transform transform hover:scale-105 shadow-lg mx-auto"
+                >
+                    <PlusIcon />
+                    <span>Criar Primeira Tarefa</span>
+                </button>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 };

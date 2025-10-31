@@ -1,6 +1,6 @@
 
 import React, { useRef } from 'react';
-import { XIcon, SunIcon, MoonIcon } from './Icons';
+import { XIcon, SunIcon, MoonIcon, BellIcon, CheckCircleIcon, XCircleIcon } from './Icons';
 
 type Theme = 'light' | 'dark';
 
@@ -12,9 +12,21 @@ interface SettingsModalProps {
   onReset: () => void;
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
+  notificationPermission: NotificationPermission;
+  onRequestNotificationPermission: () => void;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onExport, onImport, onReset, theme, onThemeChange }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ 
+    isOpen, 
+    onClose, 
+    onExport, 
+    onImport, 
+    onReset, 
+    theme, 
+    onThemeChange, 
+    notificationPermission, 
+    onRequestNotificationPermission 
+}) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -64,6 +76,37 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onExport
                     </button>
                 </div>
              </div>
+          </section>
+
+          {/* Notifications Section */}
+          <section>
+            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">Notificações</h3>
+            <div className="flex items-center gap-4">
+                {notificationPermission === 'granted' && (
+                    <div className="flex items-center gap-2 text-teal-600 dark:text-teal-400">
+                    <CheckCircleIcon />
+                    <span>As notificações estão ativadas.</span>
+                    </div>
+                )}
+                {notificationPermission === 'default' && (
+                    <button
+                    onClick={onRequestNotificationPermission}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    >
+                    <BellIcon />
+                    Ativar Notificações
+                    </button>
+                )}
+                {notificationPermission === 'denied' && (
+                    <div className="flex items-center gap-2 text-red-500 dark:text-red-400">
+                    <XCircleIcon />
+                    <span>Notificações bloqueadas. Altere nas configurações do seu navegador.</span>
+                    </div>
+                )}
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">
+                Receba um lembrete no dia do vencimento de uma tarefa.
+            </p>
           </section>
 
           {/* Data Management Section */}
