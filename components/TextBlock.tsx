@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { TextBlock as TextBlockType } from '../types';
 import { TrashIcon, GripVerticalIcon } from './Icons';
@@ -89,6 +90,13 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
         onUpdate(block.id, text);
     }
   };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleBlur();
+    }
+  };
   
   useEffect(() => {
       setText(block.text);
@@ -128,8 +136,8 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
     >
-      {dragOverPosition === 'top' && <div className="absolute top-0 left-0 right-0 h-0.5 bg-teal-400 z-10"></div>}
-      {dragOverPosition === 'bottom' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-400 z-10"></div>}
+      {dragOverPosition === 'top' && <div className="absolute top-0 left-0 right-0 h-1.5 bg-teal-500/80 rounded-full shadow-[0_0_10px] shadow-teal-400/50 z-10"></div>}
+      {dragOverPosition === 'bottom' && <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-teal-500/80 rounded-full shadow-[0_0_10px] shadow-teal-400/50 z-10"></div>}
       <div className="cursor-grab text-gray-500" title="Mover item">
         <GripVerticalIcon />
       </div>
@@ -140,19 +148,20 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
           value={text}
           onChange={handleTextChange}
           onBlur={handleBlur}
-          className="w-full bg-gray-700/50 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none overflow-hidden text-gray-300 -m-2"
+          onKeyDown={handleKeyDown}
+          className="w-full bg-gray-100/50 dark:bg-gray-700/50 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none overflow-hidden text-gray-800 dark:text-gray-300 -m-2"
           rows={1}
         />
       ) : (
         <div 
           onClick={() => setIsEditing(true)} 
-          className="prose-styles whitespace-pre-wrap cursor-pointer flex-grow p-2 -m-2 rounded-md hover:bg-gray-700/50 w-full"
+          className="prose-styles whitespace-pre-wrap cursor-pointer flex-grow p-2 -m-2 rounded-md hover:bg-gray-200/50 dark:hover:bg-gray-700/50 w-full"
           dangerouslySetInnerHTML={{ __html: parseMarkdown(block.text || ' ') }}
         />
       )}
       <button
         onClick={() => onDelete(block.id)}
-        className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="text-gray-400 dark:text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <TrashIcon />
       </button>

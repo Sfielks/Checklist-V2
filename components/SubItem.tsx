@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { SubItemBlock } from '../types';
 import { TrashIcon, CheckCircleIcon, CircleIcon, PlusCircleIcon, GripVerticalIcon } from './Icons';
@@ -80,8 +81,8 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
 
   return (
     <div style={{ paddingLeft: `${level * 28}px` }} className="relative">
-       {dragOverPosition === 'top' && <div className="absolute top-0 left-0 right-0 h-0.5 bg-teal-400 z-10"></div>}
-       {dragOverPosition === 'bottom' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-400 z-10"></div>}
+       {dragOverPosition === 'top' && <div className="absolute top-0 left-0 right-0 h-1.5 bg-teal-500/80 rounded-full shadow-[0_0_10px] shadow-teal-400/50 z-10"></div>}
+       {dragOverPosition === 'bottom' && <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-teal-500/80 rounded-full shadow-[0_0_10px] shadow-teal-400/50 z-10"></div>}
       <div 
         className="flex items-center space-x-3 group py-1.5"
         draggable
@@ -90,7 +91,7 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div className="cursor-grab text-gray-500" title="Mover item">
+        <div className="cursor-grab text-gray-400 dark:text-gray-500" title="Mover item">
             <GripVerticalIcon />
         </div>
         <button onClick={() => onToggle(subItem.id)} className="flex-shrink-0">
@@ -104,7 +105,7 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}
             className={`flex-grow bg-transparent focus:outline-none resize-none overflow-hidden ${
-              subItem.completed ? 'line-through text-gray-500' : 'text-gray-300'
+              subItem.completed ? 'line-through text-gray-500 dark:text-gray-500' : 'text-gray-800 dark:text-gray-300'
             }`}
             rows={1}
           />
@@ -112,7 +113,7 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
           <span
             onClick={() => setIsEditing(true)}
             className={`flex-grow cursor-pointer whitespace-pre-wrap ${
-              subItem.completed ? 'line-through text-gray-500' : 'text-gray-300'
+              subItem.completed ? 'line-through text-gray-500 dark:text-gray-500' : 'text-gray-800 dark:text-gray-300'
             }`}
           >
             {subItem.text || <span className="text-gray-500 italic">Subitem vazio</span>}
@@ -121,7 +122,7 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
         <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
             <button
                 onClick={() => onAddNestedSubItem(subItem.id)}
-                className="text-gray-400 hover:text-teal-400 mr-2"
+                className="text-gray-500 hover:text-teal-500 dark:text-gray-400 dark:hover:text-teal-400 mr-2"
                 title="Adicionar subitem aninhado"
             >
                 <PlusCircleIcon />

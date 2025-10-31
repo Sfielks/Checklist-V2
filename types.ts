@@ -24,4 +24,5 @@ export interface TaskType {
   dueDate?: string;
   category?: string;
   archived: boolean;
+  color?: string;
 }

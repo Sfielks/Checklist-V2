@@ -1,7 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority } from './types';
 import TaskCard from './components/TaskCard';
-import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, MenuIcon, XIcon } from './components/Icons';
+import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, MenuIcon, XIcon, SettingsIcon, AppleIcon } from './components/Icons';
+import ConfirmationDialog from './components/ConfirmationDialog';
+import SettingsModal from './components/SettingsModal';
 
 const initialTasks: TaskType[] = [
   {
@@ -17,6 +20,7 @@ const initialTasks: TaskType[] = [
     dueDate: '2024-08-15',
     category: 'Acadêmico',
     archived: false,
+    color: '#581c1c',
   },
   {
     id: '2',
@@ -45,6 +49,9 @@ const initialTasks: TaskType[] = [
 ];
 
 const LOCAL_STORAGE_KEY = 'checklist-app-tasks';
+const THEME_STORAGE_KEY = 'checklist-app-theme';
+
+type Theme = 'light' | 'dark';
 
 // Recursive helper functions for deep state manipulation
 const mapContentTree = (content: ContentBlock[], targetId: string, transform: (block: SubItemBlock) => SubItemBlock): [ContentBlock[], boolean] => {
@@ -119,28 +126,41 @@ const statusOptions: Record<'all' | 'completed' | 'in-progress', string> = {
 };
 
 
-const HomeScreen = ({ onEnter }: { onEnter: () => void }) => (
-  <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4 text-center">
+const HomeScreen = ({ onAppleLogin, onGuestLogin }: { onAppleLogin: () => void; onGuestLogin: () => void; }) => (
+  <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white flex flex-col items-center justify-center p-4 text-center transition-colors duration-300">
     <div className="max-w-2xl">
       <h1 className="text-5xl sm:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500">
         Checklist Avançado
       </h1>
-      <p className="text-gray-400 mt-4 text-lg sm:text-xl">
+      <p className="text-gray-500 dark:text-gray-400 mt-4 text-lg sm:text-xl">
         A sua ferramenta definitiva para organizar tarefas complexas, projetos e ideias. Crie checklists detalhados com subtarefas, notas, prioridades e muito mais.
       </p>
-      <button 
-        onClick={onEnter}
-        className="mt-10 bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transform hover:scale-105 transition-all duration-300 text-lg"
-      >
-        Acessar Checklist
-      </button>
+      <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4">
+        <button
+          onClick={onAppleLogin}
+          className="w-full sm:w-auto flex items-center justify-center gap-3 bg-black text-white font-semibold py-3 px-8 rounded-lg border border-gray-600 hover:bg-gray-800 transition-all duration-300 transform hover:scale-105 text-lg"
+        >
+          <AppleIcon />
+          <span>Entrar com a Apple</span>
+        </button>
+      </div>
+       <button
+          onClick={onGuestLogin}
+          className="mt-6 text-gray-500 dark:text-gray-400 hover:text-teal-500 dark:hover:text-teal-300 transition-colors"
+        >
+          Continuar como convidado
+        </button>
     </div>
   </div>
 );
 
 const App: React.FC = () => {
   const [view, setView] = useState<'home' | 'checklist'>('home');
+  const [user, setUser] = useState<{ name: string } | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [taskToDeleteId, setTaskToDeleteId] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
 
   const [tasks, setTasks] = useState<TaskType[]>(() => {
     try {
@@ -161,10 +181,28 @@ const App: React.FC = () => {
     }
   });
 
+  const [theme, setTheme] = useState<Theme>(() => {
+    const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
+    return savedTheme || 'dark';
+  });
+
   const [showArchived, setShowArchived] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'in-progress'>('all');
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch (error) {
+       console.error("Could not save theme to localStorage", error);
+    }
+  }, [theme]);
 
   useEffect(() => {
     try {
@@ -185,6 +223,22 @@ const App: React.FC = () => {
     };
   }, [isMobileMenuOpen]);
 
+  const handleAppleLogin = () => {
+    setUser({ name: 'Usuário Apple' });
+    setView('checklist');
+  };
+
+  const handleGuestLogin = () => {
+    setUser(null);
+    setView('checklist');
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setView('home');
+    setIsMobileMenuOpen(false);
+  };
+
   const handleAddTask = () => {
     const newTask: TaskType = {
       id: Date.now().toString(),
@@ -199,7 +253,17 @@ const App: React.FC = () => {
   };
 
   const handleDeleteTask = (taskId: string) => {
-    setTasks(tasks.filter((task) => task.id !== taskId));
+    setTaskToDeleteId(taskId);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!taskToDeleteId) return;
+    setTasks(tasks.filter((task) => task.id !== taskToDeleteId));
+    setTaskToDeleteId(null);
+  };
+
+  const handleCancelDelete = () => {
+    setTaskToDeleteId(null);
   };
   
   const handleToggleArchiveTask = (taskId: string) => {
@@ -218,7 +282,7 @@ const App: React.FC = () => {
     );
   };
 
-  const handleUpdateTaskDetails = (taskId: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category'>>) => {
+  const handleUpdateTaskDetails = (taskId: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category' | 'color'>>) => {
     setTasks(tasks.map(task => 
         task.id === taskId ? { ...task, ...details } : task
     ));
@@ -403,6 +467,78 @@ const App: React.FC = () => {
     });
   };
 
+  const handleExportData = () => {
+    try {
+      const dataStr = JSON.stringify(tasks, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      const date = new Date().toISOString().split('T')[0];
+      link.download = `checklist-v2-backup-${date}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setIsSettingsOpen(false);
+    } catch (error) {
+      console.error("Failed to export data", error);
+      alert("Ocorreu um erro ao exportar os dados.");
+    }
+  };
+
+  const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result;
+        if (typeof text !== 'string') {
+          throw new Error("File content is not a string");
+        }
+        const importedTasks = JSON.parse(text);
+        
+        if (!Array.isArray(importedTasks) || (importedTasks.length > 0 && (typeof importedTasks[0].id === 'undefined' || typeof importedTasks[0].title === 'undefined'))) {
+          throw new Error("Invalid file format");
+        }
+        
+        setTasks(importedTasks.map((task: any) => ({ 
+            ...task, 
+            archived: task.archived || false,
+            content: migrateSubItems(task.content || [])
+        })));
+
+        setIsSettingsOpen(false);
+        alert("Dados importados com sucesso!");
+
+      } catch (error) {
+        console.error("Failed to import data", error);
+        alert("Ocorreu um erro ao importar os dados. Verifique se o arquivo é um JSON válido exportado deste aplicativo.");
+      } finally {
+        if (event.target) {
+            event.target.value = '';
+        }
+      }
+    };
+    reader.readAsText(file);
+  };
+  
+  const handleRequestReset = () => {
+      setIsSettingsOpen(false);
+      setShowResetConfirmation(true);
+  }
+
+  const handleConfirmReset = () => {
+    setTasks(initialTasks);
+    setShowResetConfirmation(false);
+  };
+
+  const handleCancelReset = () => {
+    setShowResetConfirmation(false);
+  };
+
     const countSubItems = (items: ContentBlock[]): { total: number; completed: number } => {
         let total = 0;
         let completed = 0;
@@ -457,7 +593,7 @@ const App: React.FC = () => {
   }
   
   if (view === 'home') {
-    return <HomeScreen onEnter={() => setView('checklist')} />;
+    return <HomeScreen onAppleLogin={handleAppleLogin} onGuestLogin={handleGuestLogin} />;
   }
 
   const categoryNav = (
@@ -465,7 +601,7 @@ const App: React.FC = () => {
         <button 
             onClick={() => setCategoryFilter('all')}
             className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                categoryFilter === 'all' ? 'bg-teal-500/20 text-teal-300' : 'text-gray-300 hover:bg-gray-700/50'
+                categoryFilter === 'all' ? 'bg-teal-500/20 text-teal-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
             }`}
         >
             <ClipboardListIcon />
@@ -476,7 +612,7 @@ const App: React.FC = () => {
                 key={category}
                 onClick={() => setCategoryFilter(category)}
                 className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    categoryFilter === category ? 'bg-teal-500/20 text-teal-300' : 'text-gray-300 hover:bg-gray-700/50'
+                    categoryFilter === category ? 'bg-teal-500/20 text-teal-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
                 }`}
             >
                 <TagIcon />
@@ -489,12 +625,12 @@ const App: React.FC = () => {
   const filterControls = (isMobile: boolean) => (
     <>
       <div className={isMobile ? "flex flex-col gap-4" : "flex-1 min-w-[150px]"}>
-        <label htmlFor={isMobile ? "priority-filter-mobile" : "priority-filter"} className={isMobile ? "text-gray-300 font-medium mb-1" : "sr-only"}>Prioridade</label>
+        <label htmlFor={isMobile ? "priority-filter-mobile" : "priority-filter"} className={isMobile ? "text-gray-700 dark:text-gray-300 font-medium mb-1" : "sr-only"}>Prioridade</label>
         <select
             id={isMobile ? "priority-filter-mobile" : "priority-filter"}
             value={priorityFilter}
             onChange={e => setPriorityFilter(e.target.value as Priority | 'all')}
-            className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white"
+            className="w-full bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
         >
             {Object.entries(priorityOptions).map(([key, value]) => (
                 <option key={key} value={key}>{value}</option>
@@ -502,12 +638,12 @@ const App: React.FC = () => {
         </select>
       </div>
       <div className={isMobile ? "flex flex-col gap-4" : "flex-1 min-w-[150px]"}>
-        <label htmlFor={isMobile ? "status-filter-mobile" : "status-filter"} className={isMobile ? "text-gray-300 font-medium mb-1" : "sr-only"}>Status</label>
+        <label htmlFor={isMobile ? "status-filter-mobile" : "status-filter"} className={isMobile ? "text-gray-700 dark:text-gray-300 font-medium mb-1" : "sr-only"}>Status</label>
         <select
             id={isMobile ? "status-filter-mobile" : "status-filter"}
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value as any)}
-            className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white"
+            className="w-full bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
         >
             {Object.entries(statusOptions).map(([key, value]) => (
                 <option key={key} value={key}>{value}</option>
@@ -518,26 +654,47 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white font-sans">
-      <header className="bg-gray-800/50 backdrop-blur-sm sticky top-0 z-30 p-4 border-b border-gray-700">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white font-sans transition-colors duration-300">
+      <header className="bg-white/80 dark:bg-gray-800/50 backdrop-blur-sm sticky top-0 z-30 p-4 border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-teal-400">Checklist v2</h1>
-             <button
+            <div className="flex items-center gap-4">
+              <h1 className="text-2xl font-bold text-teal-600 dark:text-teal-400">Checklist v2</h1>
+              <button
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="text-gray-500 dark:text-gray-400 hover:text-teal-500 dark:hover:text-teal-400 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700/50"
+                  title="Configurações"
+                  aria-label="Abrir configurações"
+              >
+                  <SettingsIcon />
+              </button>
+            </div>
+            <div className="hidden md:flex items-center gap-4">
+              {user ? (
+                <>
+                  <span className="text-gray-700 dark:text-gray-300">Olá, {user.name}</span>
+                  <button onClick={handleLogout} className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors">
+                    Sair
+                  </button>
+                </>
+              ) : (
+                !showArchived && (
+                  <button
+                      onClick={handleAddTask}
+                      className="flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105"
+                  >
+                      <PlusIcon />
+                      <span>Nova Tarefa</span>
+                  </button>
+                )
+              )}
+            </div>
+            <button
                 onClick={() => setIsMobileMenuOpen(true)}
-                className="md:hidden p-2 rounded-md hover:bg-gray-700"
+                className="md:hidden p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
                 aria-label="Abrir menu"
             >
                 <MenuIcon />
             </button>
-            {!showArchived && (
-                <button
-                    onClick={handleAddTask}
-                    className="hidden md:flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105"
-                >
-                    <PlusIcon />
-                    <span>Nova Tarefa</span>
-                </button>
-            )}
         </div>
       </header>
       
@@ -547,22 +704,26 @@ const App: React.FC = () => {
         aria-hidden="true"
       ></div>
     
-      <div className={`fixed top-0 left-0 h-full w-full max-w-xs bg-gray-800 z-50 transform transition-transform duration-300 ease-in-out md:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`fixed top-0 left-0 h-full w-full max-w-xs bg-white dark:bg-gray-800 z-50 transform transition-transform duration-300 ease-in-out md:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-4 flex flex-col h-full overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-teal-400">Filtros & Categorias</h2>
-                <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 rounded-md hover:bg-gray-700" aria-label="Fechar menu">
+                 {user ? (
+                    <span className="text-lg font-semibold text-teal-600 dark:text-teal-400">Olá, {user.name}</span>
+                ) : (
+                    <h2 className="text-xl font-bold text-teal-600 dark:text-teal-400">Menu</h2>
+                )}
+                <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Fechar menu">
                     <XIcon />
                 </button>
             </div>
             
-            <div className="border-b border-gray-700 pb-4 mb-4">
-                <h3 className="text-lg font-semibold text-teal-400 mb-4">Categorias</h3>
+            <div className="border-y border-gray-200 dark:border-gray-700 py-4 my-4">
+                <h3 className="text-lg font-semibold text-teal-600 dark:text-teal-400 mb-4">Categorias</h3>
                 {categoryNav}
             </div>
             
             <div className="flex flex-col gap-4 flex-grow">
-                <div className="flex items-center gap-2 text-gray-300 font-semibold">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-semibold">
                     <FilterIcon />
                     <span>Filtrar por:</span>
                 </div>
@@ -570,11 +731,16 @@ const App: React.FC = () => {
                 <div className="mt-auto pt-4">
                   <button
                       onClick={handleClearFilters}
-                      className="w-full flex items-center justify-center gap-2 text-gray-400 hover:text-white transition-colors bg-gray-700 hover:bg-gray-600 rounded-md py-2"
+                      className="w-full flex items-center justify-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md py-2 mb-4"
                   >
                       <XCircleIcon />
                       <span>Limpar Filtros</span>
                   </button>
+                  {user && (
+                    <button onClick={handleLogout} className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                        Sair
+                    </button>
+                  )}
                 </div>
             </div>
         </div>
@@ -583,39 +749,39 @@ const App: React.FC = () => {
       <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
         <div className="flex flex-col md:flex-row gap-8">
             <aside className="w-full md:w-64 flex-shrink-0 hidden md:block">
-                <div className="p-4 bg-gray-800 rounded-lg border border-gray-700/50 sticky top-24">
-                    <h2 className="text-lg font-semibold text-teal-400 mb-4">Categorias</h2>
+                <div className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700/50 sticky top-24">
+                    <h2 className="text-lg font-semibold text-teal-600 dark:text-teal-400 mb-4">Categorias</h2>
                     {categoryNav}
                 </div>
             </aside>
 
             <div className="flex-1 min-w-0">
                 <div className="flex justify-center mb-6">
-                    <div className="bg-gray-800 p-1 rounded-lg flex items-center border border-gray-700/50">
+                    <div className="bg-white dark:bg-gray-800 p-1 rounded-lg flex items-center border border-gray-200 dark:border-gray-700/50">
                         <button
                             onClick={() => setShowArchived(false)}
-                            className={`px-6 py-2 text-sm font-semibold rounded-md transition-colors ${!showArchived ? 'bg-teal-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                            className={`px-6 py-2 text-sm font-semibold rounded-md transition-colors ${!showArchived ? 'bg-teal-500 text-white shadow' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
                         >
                             Ativas
                         </button>
                         <button
                             onClick={() => setShowArchived(true)}
-                            className={`px-6 py-2 text-sm font-semibold rounded-md transition-colors ${showArchived ? 'bg-teal-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                            className={`px-6 py-2 text-sm font-semibold rounded-md transition-colors ${showArchived ? 'bg-teal-500 text-white shadow' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
                         >
                             Arquivadas
                         </button>
                     </div>
                 </div>
 
-                <div className="bg-gray-800/80 backdrop-blur-sm p-4 rounded-lg mb-6 border border-gray-700/50 hidden md:flex flex-col sm:flex-row items-start sm:items-center gap-4 flex-wrap">
-                    <div className="flex items-center gap-2 text-gray-300 font-semibold">
+                <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-4 rounded-lg mb-6 border border-gray-200 dark:border-gray-700/50 hidden md:flex flex-col sm:flex-row items-start sm:items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-semibold">
                         <FilterIcon />
                         <span>Filtrar por:</span>
                     </div>
                     {filterControls(false)}
                     <button
                         onClick={handleClearFilters}
-                        className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+                        className="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                     >
                         <XCircleIcon />
                         <span>Limpar</span>
@@ -642,8 +808,8 @@ const App: React.FC = () => {
                         ))}
                     </div>
                 ) : (
-                    <div className="text-center py-16 px-6 bg-gray-800 rounded-lg border-2 border-dashed border-gray-700">
-                        <h3 className="text-xl font-semibold text-gray-300">
+                    <div className="text-center py-16 px-6 bg-gray-50 dark:bg-gray-800 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700">
+                        <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300">
                            {tasks.length > 0 ? "Nenhuma tarefa corresponde aos seus filtros" : (showArchived ? "Nenhuma tarefa arquivada" : "Nenhuma tarefa encontrada")}
                         </h3>
                         <p className="text-gray-500 mt-2">
@@ -664,6 +830,29 @@ const App: React.FC = () => {
             <PlusIcon />
         </button>
       )}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onExport={handleExportData}
+        onImport={handleImportData}
+        onReset={handleRequestReset}
+        theme={theme}
+        onThemeChange={setTheme}
+      />
+      <ConfirmationDialog
+        isOpen={!!taskToDeleteId}
+        onClose={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+        title="Confirmar Exclusão"
+        message="Você tem certeza de que deseja excluir permanentemente esta tarefa? Esta ação não pode ser desfeita."
+      />
+       <ConfirmationDialog
+        isOpen={showResetConfirmation}
+        onClose={handleCancelReset}
+        onConfirm={handleConfirmReset}
+        title="Confirmar Redefinição"
+        message="Você tem certeza de que deseja excluir TODAS as tarefas? Esta ação é irreversível e removerá todos os dados."
+      />
     </div>
   );
 };

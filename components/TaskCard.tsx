@@ -1,8 +1,10 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, Priority } from '../types';
 import SubItem from './SubItem';
 import TextBlock from './TextBlock';
-import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon } from './Icons';
+import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon } from './Icons';
+import ColorPalette from './ColorPalette';
 
 interface TaskCardProps {
   task: TaskType;
@@ -13,7 +15,7 @@ interface TaskCardProps {
   onDeleteBlock: (taskId: string, blockId: string) => void;
   onToggleSubItem: (taskId: string, subItemId: string) => void;
   onAddNestedSubItem: (taskId: string, parentId: string) => void;
-  onUpdateDetails: (id: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category'>>) => void;
+  onUpdateDetails: (id: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category' | 'color'>>) => void;
   onToggleArchive: (id: string) => void;
   onMoveBlock: (taskId: string, sourceId: string, targetId: string | null, position: 'before' | 'after' | 'end') => void;
 }
@@ -58,12 +60,26 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState(task.title);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const [showColorPalette, setShowColorPalette] = useState(false);
+  const paletteRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
         titleInputRef.current.focus();
     }
   }, [isEditingTitle]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (paletteRef.current && !paletteRef.current.contains(event.target as Node)) {
+        setShowColorPalette(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleTitleBlur = () => {
     setIsEditingTitle(false);
@@ -100,8 +116,16 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const { total: totalSubItems, completed: completedSubItems } = countSubItems(task.content);
   const progress = totalSubItems > 0 ? (completedSubItems / totalSubItems) * 100 : 0;
   
+  const handleSelectColor = (color: string | undefined) => {
+    onUpdateDetails(task.id, { color });
+    setShowColorPalette(false);
+  };
+
   return (
-    <div className="bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col gap-4 border border-gray-700/50 hover:border-teal-500/30 transition-all duration-300">
+    <div 
+      className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col gap-4 border border-gray-200 dark:border-gray-700/50 hover:border-teal-500/30 transition-all duration-300"
+      style={{ backgroundColor: task.color || undefined }}
+    >
       <div className="flex justify-between items-start">
         {isEditingTitle ? (
             <input
@@ -111,65 +135,75 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={handleTitleBlur}
                 onKeyDown={handleTitleKeyDown}
-                className="text-xl font-bold text-teal-400 bg-transparent border-b-2 border-teal-500 focus:outline-none w-full mr-4"
+                className="text-xl font-bold text-teal-600 dark:text-teal-400 bg-transparent border-b-2 border-teal-500 focus:outline-none w-full mr-4"
             />
         ) : (
-            <h2 onClick={() => setIsEditingTitle(true)} className="text-xl font-bold text-teal-400 cursor-pointer w-full mr-4 break-words">
+            <h2 onClick={() => setIsEditingTitle(true)} className="text-xl font-bold text-teal-600 dark:text-teal-400 cursor-pointer w-full mr-4 break-words">
                 {task.title}
             </h2>
         )}
-        <div className="flex items-center space-x-2 flex-shrink-0">
-            <button onClick={() => onToggleArchive(task.id)} className="text-gray-500 hover:text-teal-400" title={task.archived ? "Desarquivar Tarefa" : "Arquivar Tarefa"}>
+        <div className="flex items-center space-x-2 flex-shrink-0 text-gray-500">
+            <div className="relative" ref={paletteRef}>
+                <button 
+                  onClick={() => setShowColorPalette(!showColorPalette)} 
+                  className="hover:text-teal-500 dark:hover:text-teal-400" 
+                  title="Alterar Cor"
+                >
+                  <PaletteIcon />
+                </button>
+                {showColorPalette && <ColorPalette onSelectColor={handleSelectColor} />}
+            </div>
+            <button onClick={() => onToggleArchive(task.id)} className="hover:text-teal-500 dark:hover:text-teal-400" title={task.archived ? "Desarquivar Tarefa" : "Arquivar Tarefa"}>
                 {task.archived ? <UnarchiveIcon /> : <ArchiveIcon />}
             </button>
-            <button onClick={() => onDeleteTask(task.id)} className="text-gray-500 hover:text-red-400" title="Excluir Tarefa">
+            <button onClick={() => onDeleteTask(task.id)} className="hover:text-red-500 dark:hover:text-red-400" title="Excluir Tarefa">
                 <TrashIcon />
             </button>
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-6 gap-y-3 text-sm text-gray-400 border-b border-t border-gray-700/50 py-3 -mx-5 px-5">
+      <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-6 gap-y-3 text-sm text-gray-500 dark:text-gray-400 border-b border-t border-gray-200 dark:border-gray-700/50 py-3 -mx-5 px-5">
         <div className="flex items-center gap-2">
-            <label htmlFor={`priority-${task.id}`} className="font-medium text-gray-300">Prioridade:</label>
+            <label htmlFor={`priority-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">Prioridade:</label>
             <select
                 id={`priority-${task.id}`}
                 value={task.priority || 'none'}
                 onChange={(e) => onUpdateDetails(task.id, { priority: e.target.value as Priority })}
-                className={`bg-gray-700 border border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 ${priorityConfig[task.priority || 'none'].ringColor} text-white`}
+                className={`bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 text-gray-900 dark:text-white ${priorityConfig[task.priority || 'none'].ringColor}`}
             >
                 {Object.entries(priorityConfig).map(([key, { label }]) => (
-                    <option key={key} value={key} className="bg-gray-800 font-medium">{label}</option>
+                    <option key={key} value={key} className="bg-white dark:bg-gray-800 font-medium">{label}</option>
                 ))}
             </select>
         </div>
 
         <div className="flex items-center gap-2">
-             <label htmlFor={`dueDate-${task.id}`} className="font-medium text-gray-300 flex items-center gap-2"><CalendarIcon /> Vencimento:</label>
+             <label htmlFor={`dueDate-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><CalendarIcon /> Vencimento:</label>
              <input
                 id={`dueDate-${task.id}`}
                 type="date"
                 value={task.dueDate || ''}
                 onChange={(e) => onUpdateDetails(task.id, { dueDate: e.target.value })}
-                className="bg-gray-700 border border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-300"
+                className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-700 dark:text-gray-300"
                 style={{ colorScheme: 'dark' }}
             />
         </div>
         
          <div className="flex items-center gap-2">
-            <label htmlFor={`category-${task.id}`} className="font-medium text-gray-300">#</label>
+            <label htmlFor={`category-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">#</label>
             <input
                 id={`category-${task.id}`}
                 type="text"
                 placeholder="Categoria"
                 value={task.category || ''}
                 onChange={(e) => onUpdateDetails(task.id, { category: e.target.value })}
-                className="bg-gray-700 border border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 w-32 placeholder-gray-400 text-white"
+                className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 w-32 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white"
             />
         </div>
       </div>
       
       {totalSubItems > 0 && (
-        <div className="w-full bg-gray-700 rounded-full h-1.5">
+        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
           <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
         </div>
       )}
@@ -212,14 +246,14 @@ const TaskCard: React.FC<TaskCardProps> = ({
       <div className="mt-auto pt-4 flex items-center justify-stretch gap-2 text-sm">
         <button
           onClick={() => onAddBlock(task.id, 'subitem')}
-          className="flex-1 flex items-center justify-center gap-2 text-teal-400 hover:text-teal-300 bg-gray-700/50 hover:bg-gray-700 rounded-md py-2 transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
         >
           <PlusIcon />
           <span>Adicionar subitem</span>
         </button>
          <button
           onClick={() => onAddBlock(task.id, 'text')}
-          className="flex-1 flex items-center justify-center gap-2 text-teal-400 hover:text-teal-300 bg-gray-700/50 hover:bg-gray-700 rounded-md py-2 transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md py-2 transition-colors"
         >
           <PlusIcon />
           <span>Adicionar texto</span>
