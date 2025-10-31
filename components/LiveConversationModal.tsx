@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-// FIX: Removed non-exported `LiveSession` type from @google/genai import.
 import { GoogleGenAI, FunctionDeclaration, Type, Modality, LiveServerMessage, Blob } from '@google/genai';
 import { XIcon, MicrophoneIcon, SpinnerIcon } from './Icons';
 
@@ -101,7 +100,6 @@ const LiveConversationModal: React.FC<LiveConversationModalProps> = ({ isOpen, o
   const [transcript, setTranscript] = useState<Array<{ type: 'user' | 'model'; text: string }>>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // FIX: Replaced `LiveSession` with `any` as it's not an exported type.
   const sessionPromiseRef = useRef<Promise<any> | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -159,7 +157,6 @@ const LiveConversationModal: React.FC<LiveConversationModalProps> = ({ isOpen, o
         callbacks: {
           onopen: () => {
             setStatus('listening');
-            // FIX: Cast window to `any` to allow access to vendor-prefixed `webkitAudioContext` for broader browser support.
             const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
             audioContextRef.current = inputAudioContext;
             
@@ -200,7 +197,6 @@ const LiveConversationModal: React.FC<LiveConversationModalProps> = ({ isOpen, o
             if (message.toolCall?.functionCalls) {
               for (const fc of message.toolCall.functionCalls) {
                 if (fc.name === 'createTasks' && fc.args.tasks) {
-                  // FIX: Added type assertion to `fc.args.tasks` to match the expected type of `onTasksCreated`.
                   onTasksCreated(fc.args.tasks as Array<{ title: string; subItems: string[] }>);
                 }
                  sessionPromiseRef.current?.then((session) => {
@@ -247,7 +243,6 @@ const LiveConversationModal: React.FC<LiveConversationModalProps> = ({ isOpen, o
     return () => {
         stopConversation();
     };
-  // FIX: Added dependencies to useEffect to prevent stale closures.
   }, [isOpen, startConversation, stopConversation]);
 
   const handleClose = () => {

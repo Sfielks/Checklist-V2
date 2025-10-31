@@ -1,13 +1,9 @@
-
-
 import React from 'react';
 import { BoldIcon, ListBulletIcon, StrikethroughIcon } from './Icons';
 
 interface EditingToolbarProps {
   onBold: () => void;
   onStrikethrough: () => void;
-  // FIX: Made `onList` prop optional. The toolbar is used in SubItem, which is a list item itself
-  // and doesn't require list creation functionality within its text. This change resolves the type error.
   onList?: () => void;
 }
 

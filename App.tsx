@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock, SavedAnalysis, SyncStatus } from './types';
@@ -518,6 +516,15 @@ const App: React.FC = () => {
     }));
   };
   
+  const handleAddBlocks = (taskId: string, newBlocks: ContentBlock[]) => {
+    setTasks(tasks.map(task => {
+      if (task.id === taskId) {
+        return { ...task, content: [...task.content, ...newBlocks] };
+      }
+      return task;
+    }));
+  };
+
   const handleAddAttachment = (taskId: string, file: File) => {
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -611,8 +618,6 @@ const App: React.FC = () => {
     }));
   };
   
-  // FIX: Refactored the recursive function `setCompletionRecursively` to use function overloads.
-  // This provides better type inference for recursive calls, resolving the type error without an unsafe cast.
   const handleToggleAllSubItems = (taskId: string, shouldBeCompleted: boolean) => {
      setTasks(tasks.map(task => {
         if (task.id !== taskId) return task;
@@ -622,17 +627,18 @@ const App: React.FC = () => {
         function setCompletionRecursively(items: ContentBlock[]): ContentBlock[] {
             return items.map(item => {
                 if (item.type === 'subitem') {
-                    // With overloads, the cast is no longer needed.
-                    // The recursive call with item.children (SubItemBlock[]) will return SubItemBlock[].
                     return {
                         ...item,
                         completed: shouldBeCompleted,
-                        children: setCompletionRecursively(item.children)
+                        // Fix: The recursive call to `setCompletionRecursively` was returning `ContentBlock[]`
+                        // which is not assignable to `SubItemBlock['children']` (`SubItemBlock[]`).
+                        // Casting the result to `SubItemBlock[]` resolves the type mismatch.
+                        children: setCompletionRecursively(item.children) as SubItemBlock[]
                     };
                 }
                 return item;
             });
-        };
+        }
         
         return { ...task, content: setCompletionRecursively(task.content) };
     }));
@@ -665,7 +671,6 @@ const App: React.FC = () => {
 
       let sourceBlock: ContentBlock | null = null;
 
-      // Find and remove source block
       const removeSource = (content: ContentBlock[]): ContentBlock[] => {
         return content.reduce((acc, block) => {
           if (block.id === sourceId) {
@@ -673,8 +678,6 @@ const App: React.FC = () => {
             return acc;
           }
           if (block.type === 'subitem' && block.children.length > 0) {
-            // FIX: Spreading a discriminated union (`...block`) can confuse TypeScript inside a `reduce` callback.
-            // Reconstructing the object explicitly avoids type ambiguity and resolves the error.
             const updatedBlock: SubItemBlock = {
               id: block.id,
               type: 'subitem',
@@ -689,9 +692,8 @@ const App: React.FC = () => {
       };
       
       let newContent = removeSource(task.content);
-      if (!sourceBlock) return task; // Source not found, do nothing
+      if (!sourceBlock) return task;
 
-      // Insert source block at target position
       const insertTarget = (content: ContentBlock[]): ContentBlock[] => {
          if (targetId === null && position === 'end') {
              return [...content, sourceBlock!];
@@ -707,8 +709,6 @@ const App: React.FC = () => {
                 }
             }
              if (block.type === 'subitem' && block.children.length > 0) {
-                // FIX: Spreading a discriminated union (`...block`) can confuse TypeScript inside a `reduce` callback.
-                // Reconstructing the object explicitly avoids type ambiguity and resolves the error.
                 const updatedBlock: SubItemBlock = {
                   id: block.id,
                   type: 'subitem',
@@ -748,57 +748,6 @@ const App: React.FC = () => {
   };
   
   // --- AI Features ---
-
-  const handleSuggestSubItems = async (taskId: string) => {
-    if (!process.env.API_KEY) {
-        alert("A chave da API do Gemini não foi configurada.");
-        return;
-    }
-
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, isSuggesting: true } : t));
-
-    try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const task = tasks.find(t => t.id === taskId);
-        if (!task) return;
-
-        const existingSubItems = getAllSubItems(task.content).map(item => item.text).join(', ');
-
-        const prompt = `
-            Baseado no título da tarefa "${task.title}", gere uma lista de 3 a 5 subtarefas acionáveis em português.
-            As subtarefas devem ser curtas e diretas.
-            ${existingSubItems.length > 0 ? `As seguintes subtarefas já existem, então não as repita: ${existingSubItems}.` : ''}
-            Responda APENAS com um array JSON de strings, como este: ["Fazer X", "Pesquisar Y", "Revisar Z"]
-        `;
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: { responseMimeType: 'application/json' },
-        });
-
-        const suggestions: string[] = JSON.parse(response.text);
-
-        setTasks(prev => prev.map(t => {
-            if (t.id === taskId) {
-                const newSubItems: SubItemBlock[] = suggestions.map(text => ({
-                    id: `${Date.now()}-${Math.random()}`,
-                    type: 'subitem',
-                    text: text,
-                    completed: false,
-                    children: []
-                }));
-                return { ...t, content: [...t.content, ...newSubItems], isSuggesting: false };
-            }
-            return t;
-        }));
-
-    } catch (error) {
-        console.error("Error suggesting sub-items:", error);
-        alert("Não foi possível gerar sugestões. Verifique o console para mais detalhes.");
-        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, isSuggesting: false } : t));
-    }
-  };
   
   const handleSaveAnalysis = (content: string) => {
       const newAnalysis: SavedAnalysis = {
@@ -1134,6 +1083,7 @@ const App: React.FC = () => {
                                         onUpdateTitle={() => {}}
                                         onDeleteTask={() => {}}
                                         onAddBlock={() => {}}
+                                        onAddBlocks={() => {}}
                                         onAddAttachment={() => {}}
                                         onUpdateBlock={() => {}}
                                         onDeleteBlock={() => {}}
@@ -1144,7 +1094,6 @@ const App: React.FC = () => {
                                         onToggleArchive={() => {}}
                                         onMoveBlock={() => {}}
                                         onMoveTask={() => {}}
-                                        onSuggestSubItems={() => {}}
                                         draggedTaskId={null}
                                         onSetDraggedTaskId={() => {}}
                                         recentlyDeleted={null}
@@ -1178,6 +1127,7 @@ const App: React.FC = () => {
                                     onUpdateTitle={handleUpdateTaskTitle}
                                     onDeleteTask={handleDeleteTask}
                                     onAddBlock={handleAddBlock}
+                                    onAddBlocks={handleAddBlocks}
                                     onAddAttachment={handleAddAttachment}
                                     onUpdateBlock={handleUpdateBlock}
                                     onDeleteBlock={handleDeleteBlock}
@@ -1188,7 +1138,6 @@ const App: React.FC = () => {
                                     onToggleArchive={handleToggleArchiveTask}
                                     onMoveBlock={handleMoveBlock}
                                     onMoveTask={handleMoveTask}
-                                    onSuggestSubItems={handleSuggestSubItems}
                                     draggedTaskId={draggedTaskId}
                                     onSetDraggedTaskId={setDraggedTaskId}
                                     isNew={index === 0 && task.title === 'Nova Tarefa'}

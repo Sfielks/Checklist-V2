@@ -5,6 +5,7 @@ import TextBlock from './TextBlock';
 import AttachmentBlock from './AttachmentBlock';
 import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon, DotsVerticalIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, ClipboardListIcon, FlagIcon, TagIcon, DocumentTextIcon, ChevronDownIcon, SparklesIcon, SpinnerIcon, ClockIcon, XCircleIcon } from './Icons';
 import ColorPalette from './ColorPalette';
+import SuggestionModal from './SuggestionModal';
 
 interface TaskCardProps {
   task: TaskType;
@@ -12,6 +13,7 @@ interface TaskCardProps {
   onUpdateTitle: (id: string, title: string) => void;
   onDeleteTask: (id: string) => void;
   onAddBlock: (taskId: string, type: 'subitem' | 'text') => void;
+  onAddBlocks: (taskId: string, newBlocks: ContentBlock[]) => void;
   onAddAttachment: (taskId: string, file: File) => void;
   onUpdateBlock: (taskId: string, blockId: string, updates: Partial<ContentBlock>) => void;
   onDeleteBlock: (taskId: string, blockId: string) => void;
@@ -22,7 +24,6 @@ interface TaskCardProps {
   onToggleArchive: (id: string) => void;
   onMoveBlock: (taskId: string, sourceId: string, targetId: string | null, position: 'before' | 'after' | 'end') => void;
   onMoveTask: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
-  onSuggestSubItems: (taskId: string) => void;
   draggedTaskId: string | null;
   onSetDraggedTaskId: (id: string | null) => void;
   isNew?: boolean;
@@ -71,6 +72,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onUpdateTitle,
   onDeleteTask,
   onAddBlock,
+  onAddBlocks,
   onAddAttachment,
   onUpdateBlock,
   onDeleteBlock,
@@ -81,7 +83,6 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onToggleArchive,
   onMoveBlock,
   onMoveTask,
-  onSuggestSubItems,
   draggedTaskId,
   onSetDraggedTaskId,
   isNew = false,
@@ -102,6 +103,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const [isCompact, setIsCompact] = useState(false);
   const [areDetailsVisible, setAreDetailsVisible] = useState(true);
   const [tagInput, setTagInput] = useState('');
+  const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
+
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
@@ -608,16 +611,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 <span>Anexar</span>
               </button>
               <button
-                onClick={() => onSuggestSubItems(task.id)}
-                disabled={task.isSuggesting}
+                onClick={() => setIsSuggestionModalOpen(true)}
                 className="flex items-center justify-center gap-2 text-white bg-gradient-to-r from-teal-500 to-blue-600 rounded-md py-2 transition-all transform enabled:hover:scale-105 shadow-md enabled:hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {task.isSuggesting ? (
-                    <SpinnerIcon />
-                ) : (
-                    <SparklesIcon />
-                )}
-                <span>{task.isSuggesting ? 'Sugerindo...' : 'Sugerir'}</span>
+                <SparklesIcon />
+                <span>Sugerir com IA</span>
               </button>
             </div>
         </div>
@@ -642,6 +640,14 @@ const TaskCard: React.FC<TaskCardProps> = ({
         onChange={handleFileChange}
         className="hidden"
       />
+      {isSuggestionModalOpen && (
+        <SuggestionModal
+            isOpen={isSuggestionModalOpen}
+            onClose={() => setIsSuggestionModalOpen(false)}
+            task={task}
+            onAddBlocks={onAddBlocks}
+        />
+      )}
     </div>
   );
 };
