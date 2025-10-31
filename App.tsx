@@ -825,6 +825,30 @@ const App: React.FC = () => {
     }));
   };
   
+  const handleToggleAllSubItems = (taskId: string, completed: boolean) => {
+    const updateAllChildren = (items: ContentBlock[]): ContentBlock[] => {
+        return items.map(item => {
+            if (item.type === 'subitem') {
+                return {
+                    ...item,
+                    completed: completed,
+                    children: updateAllChildren(item.children) as SubItemBlock[]
+                };
+            }
+            return item;
+        });
+    };
+
+    setTasks(currentTasks => 
+        currentTasks.map(task => {
+            if (task.id === taskId) {
+                return { ...task, content: updateAllChildren(task.content) };
+            }
+            return task;
+        })
+    );
+  };
+
   const handleAddNestedSubItem = (taskId: string, parentId: string) => {
       setTasks(tasks.map(task => {
           if (task.id === taskId) {
@@ -1328,6 +1352,7 @@ const App: React.FC = () => {
                 onUpdateBlock={handleUpdateBlock}
                 onDeleteBlock={handleDeleteBlock}
                 onToggleSubItem={handleToggleSubItem}
+                onToggleAllSubItems={handleToggleAllSubItems}
                 onAddNestedSubItem={handleAddNestedSubItem}
                 onUpdateDetails={handleUpdateTaskDetails}
                 onToggleArchive={handleToggleArchiveTask}

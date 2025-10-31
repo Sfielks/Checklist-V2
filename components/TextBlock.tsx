@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { TextBlock as TextBlockType } from '../types';
 import { TrashIcon, GripVerticalIcon } from './Icons';
@@ -9,6 +10,25 @@ interface TextBlockProps {
   onDelete: (id: string) => void;
   onMoveBlock: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
 }
+
+const parseInlineMarkdown = (text: string): string => {
+  if (!text || text.trim() === '') {
+    return '<span class="text-gray-500 dark:text-gray-400 italic">Bloco de texto vazio</span>';
+  }
+  
+  // Basic escaping for security
+  let processedText = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+    
+  // Process **Bold** first
+  processedText = processedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  // Then process *Italic*
+  processedText = processedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  
+  return processedText;
+};
 
 const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMoveBlock }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -127,9 +147,8 @@ const TextBlock: React.FC<TextBlockProps> = ({ block, onUpdate, onDelete, onMove
           <div 
             onClick={() => setIsEditing(true)} 
             className="whitespace-pre-wrap cursor-pointer flex-grow p-2 -m-2 rounded-md hover:bg-gray-200/50 dark:hover:bg-gray-700/50 w-full text-gray-900 dark:text-gray-200"
-          >
-            {block.text || ' '}
-          </div>
+            dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(block.text) }}
+          />
         )}
       </div>
       <button

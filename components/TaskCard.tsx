@@ -5,7 +5,7 @@ import { TaskType, ContentBlock, SubItemBlock, Priority } from '../types';
 import SubItem from './SubItem';
 import TextBlock from './TextBlock';
 import AttachmentBlock from './AttachmentBlock';
-import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon } from './Icons';
+import { TrashIcon, PlusIcon, CalendarIcon, ArchiveIcon, UnarchiveIcon, PaletteIcon, PaperClipIcon, CheckCircleIcon, CircleIcon } from './Icons';
 import ColorPalette from './ColorPalette';
 
 interface TaskCardProps {
@@ -18,6 +18,7 @@ interface TaskCardProps {
   onUpdateBlock: (taskId: string, blockId: string, updates: Partial<ContentBlock>) => void;
   onDeleteBlock: (taskId: string, blockId: string) => void;
   onToggleSubItem: (taskId: string, subItemId: string) => void;
+  onToggleAllSubItems: (taskId: string, completed: boolean) => void;
   onAddNestedSubItem: (taskId: string, parentId: string) => void;
   onUpdateDetails: (id: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category' | 'color'>>) => void;
   onToggleArchive: (id: string) => void;
@@ -59,6 +60,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onUpdateBlock,
   onDeleteBlock,
   onToggleSubItem,
+  onToggleAllSubItems,
   onAddNestedSubItem,
   onUpdateDetails,
   onToggleArchive,
@@ -176,6 +178,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
   const { total: totalSubItems, completed: completedSubItems } = countSubItems(task.content);
   const progress = totalSubItems > 0 ? (completedSubItems / totalSubItems) * 100 : 0;
+  const isTaskCompleted = totalSubItems > 0 && completedSubItems === totalSubItems;
   
   const handleSelectColor = (color: string | undefined) => {
     onUpdateDetails(task.id, { color });
@@ -231,21 +234,35 @@ const TaskCard: React.FC<TaskCardProps> = ({
       {dragOverPosition === 'bottom' && <div className="absolute -bottom-1 left-2 right-2 h-2 bg-teal-500 rounded shadow-[0_0_12px_2px] shadow-teal-400/60 z-10 pointer-events-none"></div>}
       
       <div className="flex justify-between items-start">
-        {isEditingTitle ? (
-            <input
-                ref={titleInputRef}
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={handleTitleBlur}
-                onKeyDown={handleTitleKeyDown}
-                className="text-xl font-bold text-teal-600 dark:text-teal-400 bg-transparent border-b-2 border-teal-500 focus:outline-none w-full mr-4"
-            />
-        ) : (
-            <h2 onClick={() => setIsEditingTitle(true)} className="text-xl font-bold text-teal-600 dark:text-teal-400 cursor-pointer w-full mr-4 break-words">
-                {task.title}
-            </h2>
-        )}
+        <div className="flex items-center gap-3 w-full mr-4 min-w-0">
+          {totalSubItems > 0 && (
+            <button 
+              onClick={() => onToggleAllSubItems(task.id, !isTaskCompleted)} 
+              className="flex-shrink-0"
+              title={isTaskCompleted ? "Marcar tarefa como 'em andamento'" : "Concluir tarefa"}
+            >
+              {isTaskCompleted ? <CheckCircleIcon /> : <CircleIcon />}
+            </button>
+          )}
+          <div className="flex-grow min-w-0">
+            {isEditingTitle ? (
+                <input
+                    ref={titleInputRef}
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    onBlur={handleTitleBlur}
+                    onKeyDown={handleTitleKeyDown}
+                    className="text-xl font-bold text-teal-600 dark:text-teal-400 bg-transparent border-b-2 border-teal-500 focus:outline-none w-full"
+                />
+            ) : (
+                <h2 onClick={() => setIsEditingTitle(true)} className="text-xl font-bold text-teal-600 dark:text-teal-400 cursor-pointer w-full break-words">
+                    {task.title}
+                </h2>
+            )}
+          </div>
+        </div>
+
         <div className="flex items-center space-x-2 flex-shrink-0 text-gray-500">
             <div className="relative" ref={paletteRef}>
                 <button 
