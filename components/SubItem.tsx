@@ -120,13 +120,15 @@ const SubItem: React.FC<SubItemProps> = ({ subItem, onToggle, onUpdate, onDelete
           </span>
         )}
         <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-                onClick={() => onAddNestedSubItem(subItem.id)}
-                className="text-gray-500 hover:text-teal-500 dark:text-gray-400 dark:hover:text-teal-400 mr-2"
-                title="Adicionar subitem aninhado"
-            >
-                <PlusCircleIcon />
-            </button>
+            {level < 2 && (
+              <button
+                  onClick={() => onAddNestedSubItem(subItem.id)}
+                  className="text-gray-500 hover:text-teal-500 dark:text-gray-400 dark:hover:text-teal-400 mr-2"
+                  title="Adicionar subitem aninhado"
+              >
+                  <PlusCircleIcon />
+              </button>
+            )}
             <button
                 onClick={() => onDelete(subItem.id)}
                 className="text-gray-500 hover:text-red-500"

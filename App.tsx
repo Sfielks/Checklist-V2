@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority } from './types';
 import TaskCard from './components/TaskCard';
-import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, AppleIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon } from './components/Icons';
+import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, AppleIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon } from './components/Icons';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SettingsModal from './components/SettingsModal';
 
@@ -228,6 +228,167 @@ const HomeScreen = ({ onAppleLogin, onGuestLogin }: { onAppleLogin: () => void; 
   </div>
 );
 
+const SidebarContent: React.FC<{
+  setIsSettingsOpen: (isOpen: boolean) => void;
+  showArchived: boolean;
+  setShowArchived: (show: boolean) => void;
+  archivedTaskCount: number;
+  categoryFilter: string;
+  setCategoryFilter: (filter: string) => void;
+  tasks: TaskType[];
+  categories: string[];
+  handleDeleteCategory: (category: string) => void;
+  isAddingCategory: boolean;
+  setIsAddingCategory: (isAdding: boolean) => void;
+  newCategoryName: string;
+  setNewCategoryName: (name: string) => void;
+  handleAddCategory: () => void;
+  syncStatus: SyncStatus;
+  handleLogout: () => void;
+  onClose?: () => void;
+}> = ({
+  setIsSettingsOpen,
+  showArchived,
+  setShowArchived,
+  archivedTaskCount,
+  categoryFilter,
+  setCategoryFilter,
+  tasks,
+  categories,
+  handleDeleteCategory,
+  isAddingCategory,
+  setIsAddingCategory,
+  newCategoryName,
+  setNewCategoryName,
+  handleAddCategory,
+  syncStatus,
+  handleLogout,
+  onClose,
+}) => {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-grow">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-2xl font-bold text-teal-600 dark:text-teal-400">Tarefas</h1>
+          <button onClick={() => setIsSettingsOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Configurações">
+            <SettingsIcon />
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <ClipboardListIcon />
+              <span>Visualizações</span>
+            </h3>
+            <ul className="space-y-1">
+              <li>
+                <button
+                  onClick={() => { setShowArchived(false); onClose?.(); }}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium ${!showArchived ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                >
+                  Tarefas Ativas
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => { setShowArchived(true); onClose?.(); }}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${showArchived ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                >
+                  <span>Arquivadas</span>
+                  {archivedTaskCount > 0 && <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{archivedTaskCount}</span>}
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <TagIcon />
+              <span>Categorias</span>
+            </h3>
+            <ul className="space-y-1">
+              <li>
+                <button
+                  onClick={() => { setCategoryFilter('all'); onClose?.(); }}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${categoryFilter === 'all' ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                >
+                  <span>Todas as Categorias</span>
+                  <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{tasks.filter(t => !t.archived).length}</span>
+                </button>
+              </li>
+              {categories.map((cat) => (
+                <li key={cat} className="group flex items-center pr-1">
+                  <button
+                    onClick={() => { setCategoryFilter(cat); onClose?.(); }}
+                    className={`flex-grow text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${categoryFilter === cat ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                  >
+                    <span className="truncate" title={cat}>{cat}</span>
+                    <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full ml-2 flex-shrink-0">
+                      {tasks.filter(t => t.category === cat && !t.archived).length}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteCategory(cat)}
+                    className="ml-1 p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-red-100 dark:hover:bg-red-900/30"
+                    title={`Excluir categoria "${cat}"`}
+                  >
+                    <TrashIcon />
+                  </button>
+                </li>
+              ))}
+              {isAddingCategory ? (
+                <li className="mt-2 p-1">
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddCategory();
+                        if (e.key === 'Escape') setIsAddingCategory(false);
+                      }}
+                      className="flex-grow bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm text-gray-900 dark:text-white"
+                      placeholder="Nome da categoria"
+                      autoFocus
+                    />
+                    <button onClick={handleAddCategory} className="p-2 text-teal-500 hover:text-teal-600" title="Salvar">
+                      <CheckCircleIcon />
+                    </button>
+                    <button onClick={() => setIsAddingCategory(false)} className="p-2 text-gray-500 hover:text-gray-700" title="Cancelar">
+                      <XCircleIcon />
+                    </button>
+                  </div>
+                </li>
+              ) : (
+                <li className="mt-2">
+                  <button
+                    onClick={() => setIsAddingCategory(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors"
+                  >
+                    <PlusCircleIcon />
+                    <span>Nova Categoria</span>
+                  </button>
+                </li>
+              )}
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div className="mt-auto flex-shrink-0 pt-4">
+        <SyncStatusIndicator status={syncStatus} />
+        <button
+          onClick={handleLogout}
+          className="w-full mt-2 text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors py-2 rounded-md text-center"
+        >
+          Sair
+        </button>
+      </div>
+    </div>
+  );
+};
+
+
 const App: React.FC = () => {
   const [view, setView] = useState<View>('home');
   const [user, setUser] = useState<User | null>(null);
@@ -237,6 +398,7 @@ const App: React.FC = () => {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
@@ -774,6 +936,7 @@ const App: React.FC = () => {
   });
 
   const archivedTaskCount = tasks.filter(t => t.archived).length;
+  const pageTitle = showArchived ? 'Tarefas Arquivadas' : categoryFilter !== 'all' ? categoryFilter : 'Suas Tarefas';
 
   if (view === 'home') {
     return <HomeScreen onAppleLogin={handleAppleLogin} onGuestLogin={handleGuestLogin} />;
@@ -831,6 +994,26 @@ const App: React.FC = () => {
     </div>
   );
 
+  const sidebarProps = {
+    setIsSettingsOpen,
+    showArchived,
+    setShowArchived,
+    archivedTaskCount,
+    categoryFilter,
+    setCategoryFilter,
+    tasks,
+    categories,
+    handleDeleteCategory,
+    isAddingCategory,
+    setIsAddingCategory,
+    newCategoryName,
+    setNewCategoryName,
+    handleAddCategory,
+    syncStatus,
+    handleLogout,
+  };
+
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 transition-colors duration-300">
       
@@ -871,160 +1054,65 @@ const App: React.FC = () => {
       />
 
       {isFilterModalOpen && <FilterModal />}
+
+      {/* Mobile Drawer */}
+      {isDrawerOpen && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black/60 z-30 lg:hidden" 
+            onClick={() => setIsDrawerOpen(false)}
+            aria-hidden="true"
+          ></div>
+          <aside className="fixed top-0 left-0 h-full w-72 bg-white dark:bg-gray-800 p-6 z-40 lg:hidden animate-slide-in-left overflow-y-auto">
+            <button 
+              onClick={() => setIsDrawerOpen(false)} 
+              className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+              aria-label="Fechar menu"
+            >
+              <XIcon />
+            </button>
+            <SidebarContent 
+              {...sidebarProps}
+              onClose={() => setIsDrawerOpen(false)}
+            />
+          </aside>
+        </>
+      )}
       
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="hidden lg:block w-72 bg-white dark:bg-gray-800/50 border-r border-gray-200 dark:border-gray-700/50 p-6 min-h-screen sticky top-0">
-           <div className="flex items-center justify-between mb-8">
-                <h1 className="text-2xl font-bold text-teal-600 dark:text-teal-400">Tarefas</h1>
-                 <button onClick={() => setIsSettingsOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Configurações">
-                    <SettingsIcon />
-                </button>
-           </div>
-
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                <ClipboardListIcon />
-                <span>Visualizações</span>
-              </h3>
-              <ul className="space-y-1">
-                 <li>
-                  <button
-                    onClick={() => setShowArchived(false)}
-                    className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium ${!showArchived ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-                  >
-                    Tarefas Ativas
-                  </button>
-                </li>
-                <li>
-                  <button
-                    onClick={() => setShowArchived(true)}
-                    className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${showArchived ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-                  >
-                    <span>Arquivadas</span>
-                    {archivedTaskCount > 0 && <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{archivedTaskCount}</span>}
-                  </button>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                <TagIcon />
-                <span>Categorias</span>
-              </h3>
-              <ul className="space-y-1">
-                <li>
-                  <button
-                    onClick={() => setCategoryFilter('all')}
-                    className={`w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${
-                      categoryFilter === 'all'
-                        ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <span>Todas as Categorias</span>
-                    <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{tasks.filter(t => !t.archived).length}</span>
-                  </button>
-                </li>
-                {categories.map((cat) => (
-                  <li key={cat} className="group flex items-center pr-1">
-                    <button
-                      onClick={() => setCategoryFilter(cat)}
-                      className={`flex-grow text-left px-3 py-2 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${
-                        categoryFilter === cat
-                          ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300'
-                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      <span className="truncate" title={cat}>{cat}</span>
-                      <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full ml-2 flex-shrink-0">
-                        {tasks.filter(t => t.category === cat && !t.archived).length}
-                      </span>
-                    </button>
-                     <button 
-                        onClick={() => handleDeleteCategory(cat)}
-                        className="ml-1 p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-red-100 dark:hover:bg-red-900/30"
-                        title={`Excluir categoria "${cat}"`}
-                    >
-                        <TrashIcon />
-                    </button>
-                  </li>
-                ))}
-                {isAddingCategory ? (
-                  <li className="mt-2 p-1">
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        value={newCategoryName}
-                        onChange={(e) => setNewCategoryName(e.target.value)}
-                        onKeyDown={(e) => {
-                           if (e.key === 'Enter') handleAddCategory();
-                           if (e.key === 'Escape') setIsAddingCategory(false);
-                        }}
-                        className="flex-grow bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm text-gray-900 dark:text-white"
-                        placeholder="Nome da categoria"
-                        autoFocus
-                      />
-                      <button onClick={handleAddCategory} className="p-2 text-teal-500 hover:text-teal-600" title="Salvar">
-                        <CheckCircleIcon />
-                      </button>
-                      <button onClick={() => setIsAddingCategory(false)} className="p-2 text-gray-500 hover:text-gray-700" title="Cancelar">
-                        <XCircleIcon />
-                      </button>
-                    </div>
-                  </li>
-                ) : (
-                  <li className="mt-2">
-                    <button
-                      onClick={() => setIsAddingCategory(true)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors"
-                    >
-                      <PlusCircleIcon />
-                      <span>Nova Categoria</span>
-                    </button>
-                  </li>
-                )}
-              </ul>
-            </div>
-          </div>
-          <div className="mt-auto absolute bottom-6 left-6 right-6">
-                <SyncStatusIndicator status={syncStatus} />
-                <button 
-                    onClick={handleLogout}
-                    className="w-full mt-2 text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors py-2 rounded-md text-center"
-                >
-                    Sair
-                </button>
-            </div>
+      <div className="lg:grid lg:grid-cols-[288px_1fr]">
+        {/* Desktop Sidebar */}
+        <aside className="hidden lg:block bg-white dark:bg-gray-800/50 border-r border-gray-200 dark:border-gray-700/50 p-6 h-screen sticky top-0 overflow-y-auto">
+           <SidebarContent {...sidebarProps} />
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
-          <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-             <div>
-                <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200">
-                  {showArchived ? 'Tarefas Arquivadas' : 'Suas Tarefas'}
-                </h1>
-                <p className="text-gray-500 dark:text-gray-400 mt-1">
-                    {filteredTasks.length > 0
-                        ? `${filteredTasks.length} tarefa${filteredTasks.length > 1 ? 's' : ''} encontrada${filteredTasks.length > 1 ? 's' : ''}.`
-                        : 'Nenhuma tarefa encontrada.'}
-                </p>
+        <main className="p-4 sm:p-6 lg:p-8">
+          <header className="flex justify-between items-center mb-6 gap-4">
+             <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+                <button onClick={() => setIsDrawerOpen(true)} className="lg:hidden p-2 -ml-2 text-gray-600 dark:text-gray-300">
+                    <MenuIcon />
+                </button>
+                <div className="flex-1 min-w-0">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200 truncate" title={pageTitle}>
+                        {pageTitle}
+                    </h1>
+                    <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">
+                        {filteredTasks.length} tarefa{filteredTasks.length !== 1 ? 's' : ''}
+                    </p>
+                </div>
             </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                     onClick={() => setIsFilterModalOpen(true)}
-                    className="lg:hidden flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-sm"
+                    className="flex items-center justify-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-sm"
                 >
                     <FilterIcon />
-                    <span>Filtros</span>
+                    <span className="hidden sm:inline">Filtros</span>
                 </button>
                 {!showArchived && (
                     <button
                         onClick={handleAddTask}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-teal-700 transition-transform transform hover:scale-105 shadow-lg"
+                        className="hidden lg:flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-teal-700 transition-transform transform hover:scale-105 shadow-lg"
                     >
                         <PlusIcon />
                         <span>Nova Tarefa</span>
@@ -1038,6 +1126,7 @@ const App: React.FC = () => {
               <TaskCard
                 key={task.id}
                 task={task}
+                categories={categories}
                 onUpdateTitle={handleUpdateTaskTitle}
                 onDeleteTask={handleDeleteTask}
                 onAddBlock={handleAddBlock}
@@ -1071,6 +1160,17 @@ const App: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* FAB for Mobile */}
+      {!showArchived && (
+        <button
+          onClick={handleAddTask}
+          className="lg:hidden fixed bottom-6 right-6 bg-teal-600 text-white p-4 rounded-full shadow-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 dark:focus:ring-offset-gray-900 transition-transform transform hover:scale-110"
+          aria-label="Adicionar nova tarefa"
+        >
+          <PlusIcon />
+        </button>
+      )}
     </div>
   );
 };

@@ -8,6 +8,7 @@ import ColorPalette from './ColorPalette';
 
 interface TaskCardProps {
   task: TaskType;
+  categories: string[];
   onUpdateTitle: (id: string, title: string) => void;
   onDeleteTask: (id: string) => void;
   onAddBlock: (taskId: string, type: 'subitem' | 'text') => void;
@@ -46,6 +47,7 @@ const countSubItems = (items: ContentBlock[]): { total: number; completed: numbe
 
 const TaskCard: React.FC<TaskCardProps> = ({
   task,
+  categories,
   onUpdateTitle,
   onDeleteTask,
   onAddBlock,
@@ -62,6 +64,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const titleInputRef = useRef<HTMLInputElement>(null);
   const [showColorPalette, setShowColorPalette] = useState(false);
   const paletteRef = useRef<HTMLDivElement>(null);
+  const [categoryValue, setCategoryValue] = useState(task.category || '');
+  const [isCategoryFocused, setIsCategoryFocused] = useState(false);
+  const categoryContainerRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
@@ -74,18 +80,31 @@ const TaskCard: React.FC<TaskCardProps> = ({
       if (paletteRef.current && !paletteRef.current.contains(event.target as Node)) {
         setShowColorPalette(false);
       }
+      if (categoryContainerRef.current && !categoryContainerRef.current.contains(event.target as Node)) {
+        if (isCategoryFocused) {
+          if (categoryValue.trim() !== (task.category || '')) {
+             onUpdateDetails(task.id, { category: categoryValue });
+          }
+        }
+        setIsCategoryFocused(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [isCategoryFocused, categoryValue, onUpdateDetails, task.id, task.category]);
+
+  useEffect(() => {
+    setCategoryValue(task.category || '');
+  }, [task.category]);
+
 
   const handleTitleBlur = () => {
     setIsEditingTitle(false);
     if(title.trim() === '') {
         setTitle(task.title); // revert if empty
-    } else {
+    } else if (title !== task.title) {
         onUpdateTitle(task.id, title);
     }
   };
@@ -120,11 +139,35 @@ const TaskCard: React.FC<TaskCardProps> = ({
     onUpdateDetails(task.id, { color });
     setShowColorPalette(false);
   };
+  
+  const handleSelectCategory = (category: string) => {
+    setCategoryValue(category);
+    onUpdateDetails(task.id, { category });
+    setIsCategoryFocused(false);
+  };
+  
+  const handleCategoryKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      if (categoryValue.trim() !== (task.category || '')) {
+          onUpdateDetails(task.id, { category: categoryValue });
+      }
+      setIsCategoryFocused(false);
+      e.currentTarget.blur();
+    }
+     if (e.key === 'Escape') {
+      setIsCategoryFocused(false);
+      e.currentTarget.blur();
+    }
+  };
+  
+  const filteredCategories = categories.filter(
+      cat => cat.toLowerCase().includes(categoryValue.toLowerCase()) && cat.toLowerCase() !== categoryValue.toLowerCase()
+  );
 
   return (
     <div 
-      className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col gap-4 border border-gray-200 dark:border-gray-700/50 hover:border-teal-500/30 transition-all duration-300"
-      style={{ backgroundColor: task.color || undefined }}
+      className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col gap-4 border border-gray-200 dark:border-gray-700/50 hover:border-teal-500/30 transition-all duration-300 border-t-8"
+      style={{ borderTopColor: task.color || 'transparent' }}
     >
       <div className="flex justify-between items-start">
         {isEditingTitle ? (
@@ -189,16 +232,34 @@ const TaskCard: React.FC<TaskCardProps> = ({
             />
         </div>
         
-         <div className="flex items-center gap-2">
+         <div ref={categoryContainerRef} className="relative flex items-center gap-2">
             <label htmlFor={`category-${task.id}`} className="font-medium text-gray-700 dark:text-gray-300">#</label>
             <input
                 id={`category-${task.id}`}
                 type="text"
                 placeholder="Categoria"
-                value={task.category || ''}
-                onChange={(e) => onUpdateDetails(task.id, { category: e.target.value })}
+                value={categoryValue}
+                onChange={(e) => setCategoryValue(e.target.value)}
+                onFocus={() => setIsCategoryFocused(true)}
+                onKeyDown={handleCategoryKeyDown}
                 className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 focus:outline-none focus:ring-2 focus:ring-teal-500 w-32 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white"
             />
+            {isCategoryFocused && filteredCategories.length > 0 && (
+                <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-gray-800 rounded-md shadow-lg border dark:border-gray-700 z-10 max-h-40 overflow-y-auto">
+                    {filteredCategories.map(cat => (
+                        <div
+                            key={cat}
+                            className="px-3 py-2 text-sm cursor-pointer hover:bg-teal-100 dark:hover:bg-teal-900/50"
+                            onMouseDown={(e) => {
+                                e.preventDefault(); // prevent input blur before click
+                                handleSelectCategory(cat);
+                            }}
+                        >
+                            {cat}
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
       </div>
       
