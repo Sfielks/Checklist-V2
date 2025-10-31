@@ -1,10 +1,13 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock } from './types';
+import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock, SavedAnalysis } from './types';
 import TaskCard from './components/TaskCard';
-import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon } from './components/Icons';
+import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon, SparklesIcon, BookmarkIcon } from './components/Icons';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SettingsModal from './components/SettingsModal';
+import PanoramaModal from './components/PanoramaModal';
+import SavedAnalysesModal from './components/SavedAnalysesModal';
 
 const initialTasks: TaskType[] = [
   {
@@ -49,6 +52,7 @@ const initialTasks: TaskType[] = [
 ];
 
 const LOCAL_STORAGE_KEY = 'checklist-app-tasks-guest';
+const ANALYSES_STORAGE_KEY = 'checklist-app-analyses';
 const CLOUD_STORAGE_KEY_PREFIX = 'checklist-app-cloud-';
 const THEME_STORAGE_KEY = 'checklist-app-theme';
 
@@ -226,6 +230,8 @@ const HomeScreen = ({ onGuestLogin }: { onGuestLogin: () => void; }) => (
 
 const SidebarContent: React.FC<{
   setIsSettingsOpen: (isOpen: boolean) => void;
+  setIsPanoramaOpen: (isOpen: boolean) => void;
+  setIsSavedAnalysesOpen: (isOpen: boolean) => void;
   showArchived: boolean;
   setShowArchived: (show: boolean) => void;
   archivedTaskCount: number;
@@ -246,6 +252,8 @@ const SidebarContent: React.FC<{
   onClose?: () => void;
 }> = ({
   setIsSettingsOpen,
+  setIsPanoramaOpen,
+  setIsSavedAnalysesOpen,
   showArchived,
   setShowArchived,
   archivedTaskCount,
@@ -270,9 +278,11 @@ const SidebarContent: React.FC<{
       <div className="flex-grow">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-teal-600 dark:text-teal-400">Tarefas</h1>
-          <button onClick={() => setIsSettingsOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Configurações">
-            <SettingsIcon />
-          </button>
+          {onClose ? null : (
+            <button onClick={() => setIsSettingsOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Configurações">
+              <SettingsIcon />
+            </button>
+          )}
         </div>
 
         <div className="space-y-6">
@@ -300,6 +310,33 @@ const SidebarContent: React.FC<{
                 </button>
               </li>
             </ul>
+          </div>
+          
+          <div>
+              <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                  <SparklesIcon />
+                  <span>Ferramentas IA</span>
+              </h3>
+              <ul className="space-y-1">
+                  <li>
+                      <button
+                          onClick={() => { setIsPanoramaOpen(true); onClose?.(); }}
+                          className="w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-2"
+                      >
+                          <SparklesIcon />
+                          <span>Análise com IA</span>
+                      </button>
+                  </li>
+                   <li>
+                      <button
+                          onClick={() => { setIsSavedAnalysesOpen(true); onClose?.(); }}
+                          className="w-full text-left px-3 py-2 rounded-md transition-colors text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-2"
+                      >
+                          <BookmarkIcon />
+                          <span>Análises Salvas</span>
+                      </button>
+                  </li>
+              </ul>
           </div>
 
           <div>
@@ -396,12 +433,24 @@ const SidebarContent: React.FC<{
       </div>
       <div className="mt-auto flex-shrink-0 pt-4">
         <SyncStatusIndicator status={syncStatus} />
-        <button
-          onClick={handleLogout}
-          className="w-full mt-2 text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors py-2 rounded-md text-center"
-        >
-          Sair
-        </button>
+        <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={() => {
+                setIsSettingsOpen(true);
+                onClose?.();
+              }}
+              className="flex items-center justify-center gap-2 flex-1 text-sm text-gray-600 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors py-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
+            >
+              <SettingsIcon className="h-5 w-5"/>
+              <span>Configurações</span>
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center justify-center gap-2 flex-1 text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors py-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
+            >
+              Sair
+            </button>
+          </div>
       </div>
     </div>
   );
@@ -413,9 +462,12 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [taskToDeleteId, setTaskToDeleteId] = useState<string | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+  const [analysisToDeleteId, setAnalysisToDeleteId] = useState<string | null>(null);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isPanoramaOpen, setIsPanoramaOpen] = useState(false);
+  const [isSavedAnalysesOpen, setIsSavedAnalysesOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
@@ -440,6 +492,16 @@ const App: React.FC = () => {
      {
       console.error("Could not load tasks from localStorage", error);
       return initialTasks;
+    }
+  });
+
+   const [savedAnalyses, setSavedAnalyses] = useState<SavedAnalysis[]>(() => {
+    try {
+      const saved = window.localStorage.getItem(ANALYSES_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch (error) {
+      console.error("Could not load analyses from localStorage", error);
+      return [];
     }
   });
   
@@ -507,6 +569,14 @@ const App: React.FC = () => {
 
     return () => clearTimeout(handler);
   }, [tasks, user]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ANALYSES_STORAGE_KEY, JSON.stringify(savedAnalyses));
+    } catch (error) {
+      console.error("Could not save analyses to localStorage", error);
+    }
+  }, [savedAnalyses]);
   
   // Effect for checking due tasks and sending notifications
   useEffect(() => {
@@ -842,6 +912,30 @@ const App: React.FC = () => {
         return newTasks;
     });
   };
+  
+  const handleMoveTask = (sourceId: string, targetId: string, position: 'before' | 'after') => {
+    setTasks(currentTasks => {
+      const sourceIndex = currentTasks.findIndex(t => t.id === sourceId);
+      const targetIndex = currentTasks.findIndex(t => t.id === targetId);
+
+      if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+        return currentTasks;
+      }
+
+      const newTasks = Array.from(currentTasks);
+      const [movedTask] = newTasks.splice(sourceIndex, 1);
+      
+      const newTargetIndex = newTasks.findIndex(t => t.id === targetId);
+
+      if (position === 'before') {
+        newTasks.splice(newTargetIndex, 0, movedTask);
+      } else { // 'after'
+        newTasks.splice(newTargetIndex + 1, 0, movedTask);
+      }
+
+      return newTasks;
+    });
+  };
 
   const handleExportData = () => {
     try {
@@ -902,6 +996,7 @@ const App: React.FC = () => {
   
   const handleConfirmReset = () => {
     setTasks(initialTasks);
+    setSavedAnalyses([]);
     const initialCategories = Array.from(new Set(initialTasks.map(t => t.category).filter(Boolean)));
     setCategories(initialCategories.sort());
     setPriorityFilter('all');
@@ -956,6 +1051,32 @@ const App: React.FC = () => {
   const handleCancelDeleteCategory = () => {
     setCategoryToDelete(null);
   };
+  
+  const handleSaveAnalysis = (content: string) => {
+    const now = new Date();
+    const newAnalysis: SavedAnalysis = {
+        id: now.toISOString(),
+        title: `Análise de ${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit'})}`,
+        content: content,
+        createdAt: now.toISOString(),
+    };
+    setSavedAnalyses(prev => [newAnalysis, ...prev]);
+  };
+
+  const handleDeleteAnalysis = (id: string) => {
+    setAnalysisToDeleteId(id);
+  };
+
+  const handleConfirmDeleteAnalysis = () => {
+      if (!analysisToDeleteId) return;
+      setSavedAnalyses(prev => prev.filter(a => a.id !== analysisToDeleteId));
+      setAnalysisToDeleteId(null);
+  };
+  
+  const handleCancelDeleteAnalysis = () => {
+      setAnalysisToDeleteId(null);
+  };
+
 
   const filteredTasks = tasks.filter((task) => {
     const isArchivedMatch = showArchived ? task.archived : !task.archived;
@@ -1043,6 +1164,8 @@ const App: React.FC = () => {
 
   const sidebarProps = {
     setIsSettingsOpen,
+    setIsPanoramaOpen,
+    setIsSavedAnalysesOpen,
     showArchived,
     setShowArchived,
     archivedTaskCount,
@@ -1082,6 +1205,14 @@ const App: React.FC = () => {
         message={`Tem certeza de que deseja excluir a categoria "${categoryToDelete}"? Esta ação removerá a categoria de todas as tarefas associadas, mas não excluirá as tarefas em si.`}
       />
 
+       <ConfirmationDialog
+        isOpen={!!analysisToDeleteId}
+        onClose={handleCancelDeleteAnalysis}
+        onConfirm={handleConfirmDeleteAnalysis}
+        title="Excluir Análise"
+        message="Tem certeza de que deseja excluir esta análise salva? Esta ação é irreversível."
+      />
+
       <ConfirmationDialog
           isOpen={showResetConfirmation}
           onClose={() => setShowResetConfirmation(false)}
@@ -1100,6 +1231,20 @@ const App: React.FC = () => {
         onThemeChange={setTheme}
         notificationPermission={notificationPermission}
         onRequestNotificationPermission={handleRequestNotificationPermission}
+      />
+      
+      <PanoramaModal
+        isOpen={isPanoramaOpen}
+        onClose={() => setIsPanoramaOpen(false)}
+        tasks={tasks}
+        onSaveAnalysis={handleSaveAnalysis}
+      />
+
+      <SavedAnalysesModal
+        isOpen={isSavedAnalysesOpen}
+        onClose={() => setIsSavedAnalysesOpen(false)}
+        analyses={savedAnalyses}
+        onDelete={handleDeleteAnalysis}
       />
 
       {isFilterModalOpen && <FilterModal />}
@@ -1187,6 +1332,7 @@ const App: React.FC = () => {
                 onUpdateDetails={handleUpdateTaskDetails}
                 onToggleArchive={handleToggleArchiveTask}
                 onMoveBlock={handleMoveBlock}
+                onMoveTask={handleMoveTask}
               />
             ))}
           </div>

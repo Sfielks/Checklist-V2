@@ -35,3 +35,10 @@ export interface TaskType {
   archived: boolean;
   color?: string;
 }
+
+export interface SavedAnalysis {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+}

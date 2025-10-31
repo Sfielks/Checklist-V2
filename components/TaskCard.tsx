@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, Priority } from '../types';
 import SubItem from './SubItem';
@@ -21,6 +22,7 @@ interface TaskCardProps {
   onUpdateDetails: (id: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category' | 'color'>>) => void;
   onToggleArchive: (id: string) => void;
   onMoveBlock: (taskId: string, sourceId: string, targetId: string | null, position: 'before' | 'after' | 'end') => void;
+  onMoveTask: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
 }
 
 const priorityConfig: Record<Priority, { label: string; ringColor: string }> = {
@@ -61,6 +63,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onUpdateDetails,
   onToggleArchive,
   onMoveBlock,
+  onMoveTask,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -71,6 +74,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const [isCategoryFocused, setIsCategoryFocused] = useState(false);
   const categoryContainerRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | null>(null);
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
@@ -135,6 +139,41 @@ const TaskCard: React.FC<TaskCardProps> = ({
     }
   };
 
+  const handleTaskDragStart = (e: React.DragEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName.toLowerCase() === 'input' || target.tagName.toLowerCase() === 'textarea' || target.tagName.toLowerCase() === 'select' || target.closest('button')) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.setData('application/task-id', task.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleTaskDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('application/task-id')) {
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        const midpoint = rect.y + rect.height / 2;
+        setDragOverPosition(e.clientY < midpoint ? 'top' : 'bottom');
+    }
+  };
+
+  const handleTaskDragLeave = () => {
+    setDragOverPosition(null);
+  };
+
+  const handleTaskDrop = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('application/task-id')) {
+        e.preventDefault();
+        const sourceId = e.dataTransfer.getData('application/task-id');
+        if (sourceId && sourceId !== task.id) {
+            onMoveTask(sourceId, task.id, dragOverPosition === 'top' ? 'before' : 'after');
+        }
+        setDragOverPosition(null);
+    }
+  };
+
+
   const { total: totalSubItems, completed: completedSubItems } = countSubItems(task.content);
   const progress = totalSubItems > 0 ? (completedSubItems / totalSubItems) * 100 : 0;
   
@@ -180,9 +219,17 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
   return (
     <div 
-      className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col gap-4 border border-gray-200 dark:border-gray-700/50 hover:border-teal-500/30 transition-all duration-300 border-t-8"
+      className="relative bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col gap-4 border border-gray-200 dark:border-gray-700/50 hover:border-teal-500/30 transition-all duration-300 border-t-8 cursor-grab"
       style={{ borderTopColor: task.color || 'transparent' }}
+      draggable="true"
+      onDragStart={handleTaskDragStart}
+      onDragOver={handleTaskDragOver}
+      onDragLeave={handleTaskDragLeave}
+      onDrop={handleTaskDrop}
     >
+      {dragOverPosition === 'top' && <div className="absolute -top-1 left-2 right-2 h-2 bg-teal-500 rounded shadow-[0_0_12px_2px] shadow-teal-400/60 z-10 pointer-events-none"></div>}
+      {dragOverPosition === 'bottom' && <div className="absolute -bottom-1 left-2 right-2 h-2 bg-teal-500 rounded shadow-[0_0_12px_2px] shadow-teal-400/60 z-10 pointer-events-none"></div>}
+      
       <div className="flex justify-between items-start">
         {isEditingTitle ? (
             <input
