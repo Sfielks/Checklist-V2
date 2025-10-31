@@ -71,3 +71,21 @@ export const PlusCircleIcon = () => (
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
 );
+
+export const MenuIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16m-16 6h16" />
+  </svg>
+);
+
+export const XIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+);
+
+export const GripVerticalIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+    <path d="M7 5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM5 13.5a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM11.5 6.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM13 11.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM11.5 16.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"></path>
+  </svg>
+);

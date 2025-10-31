@@ -15,6 +15,7 @@ interface TaskCardProps {
   onAddNestedSubItem: (taskId: string, parentId: string) => void;
   onUpdateDetails: (id: string, details: Partial<Pick<TaskType, 'priority' | 'dueDate' | 'category'>>) => void;
   onToggleArchive: (id: string) => void;
+  onMoveBlock: (taskId: string, sourceId: string, targetId: string | null, position: 'before' | 'after' | 'end') => void;
 }
 
 const priorityConfig: Record<Priority, { label: string; ringColor: string }> = {
@@ -52,6 +53,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onAddNestedSubItem,
   onUpdateDetails,
   onToggleArchive,
+  onMoveBlock,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -78,6 +80,23 @@ const TaskCard: React.FC<TaskCardProps> = ({
     }
   };
   
+  const handleContentDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleContentDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('text/plain');
+    const target = e.target as HTMLElement;
+    // Check if dropping in the container but not on another draggable item
+    if (sourceId && target.closest('[data-dropzone="true"]')) {
+      const closestDraggable = target.closest('[draggable="true"]');
+      if (!closestDraggable) {
+        onMoveBlock(task.id, sourceId, null, 'end');
+      }
+    }
+  };
+
   const { total: totalSubItems, completed: completedSubItems } = countSubItems(task.content);
   const progress = totalSubItems > 0 ? (completedSubItems / totalSubItems) * 100 : 0;
   
@@ -155,7 +174,12 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </div>
       )}
 
-      <div className="flex flex-col">
+      <div 
+        className="flex flex-col min-h-[2rem]"
+        data-dropzone="true"
+        onDragOver={handleContentDragOver}
+        onDrop={handleContentDrop}
+       >
         {task.content.map((block) => {
            if (block.type === 'subitem') {
             return (
@@ -166,6 +190,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 onUpdate={(_id, text) => onUpdateBlock(task.id, block.id, { text })}
                 onDelete={(_id) => onDeleteBlock(task.id, block.id)}
                 onAddNestedSubItem={(parentId) => onAddNestedSubItem(task.id, parentId)}
+                onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
               />
             );
           }
@@ -176,6 +201,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 block={block}
                 onUpdate={(_id, text) => onUpdateBlock(task.id, block.id, { text })}
                 onDelete={(_id) => onDeleteBlock(task.id, block.id)}
+                onMoveBlock={(sourceId, targetId, position) => onMoveBlock(task.id, sourceId, targetId, position)}
               />
             );
           }
