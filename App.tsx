@@ -3,11 +3,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { TaskType, ContentBlock, SubItemBlock, TextBlock, Priority, AttachmentBlock, SavedAnalysis } from './types';
 import TaskCard from './components/TaskCard';
-import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon, SparklesIcon, BookmarkIcon } from './components/Icons';
+import { PlusIcon, FilterIcon, XCircleIcon, ClipboardListIcon, TagIcon, XIcon, SettingsIcon, ArchiveIcon, SpinnerIcon, CloudCheckIcon, CloudOffIcon, ExclamationCircleIcon, PlusCircleIcon, TrashIcon, CheckCircleIcon, MenuIcon, BellIcon, SparklesIcon, BookmarkIcon, MicrophoneIcon } from './components/Icons';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SettingsModal from './components/SettingsModal';
 import PanoramaModal from './components/PanoramaModal';
 import SavedAnalysesModal from './components/SavedAnalysesModal';
+import LiveConversationModal from './components/LiveConversationModal';
 
 const initialTasks: TaskType[] = [
   {
@@ -468,6 +469,7 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPanoramaOpen, setIsPanoramaOpen] = useState(false);
   const [isSavedAnalysesOpen, setIsSavedAnalysesOpen] = useState(false);
+  const [isLiveConversationOpen, setIsLiveConversationOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
@@ -1101,6 +1103,32 @@ const App: React.FC = () => {
       setAnalysisToDeleteId(null);
   };
 
+  const handleAITasksCreation = (createdTasks: Array<{ title: string; subItems: string[] }>) => {
+    const newTasks: TaskType[] = createdTasks.map(taskData => {
+      const taskId = Date.now().toString() + Math.random();
+      const content: SubItemBlock[] = (taskData.subItems || []).map((subItemText, index) => ({
+        id: `${taskId}-${index}`,
+        type: 'subitem',
+        text: subItemText,
+        completed: false,
+        children: [],
+      }));
+      
+      return {
+        id: taskId,
+        title: taskData.title,
+        content: content,
+        priority: 'none',
+        dueDate: '',
+        category: categoryFilter !== 'all' ? categoryFilter : '',
+        archived: false,
+      };
+    });
+
+    setTasks(prevTasks => [...newTasks, ...prevTasks]);
+    setIsLiveConversationOpen(false); // Close modal after creation
+  };
+
 
   const filteredTasks = tasks.filter((task) => {
     const isArchivedMatch = showArchived ? task.archived : !task.archived;
@@ -1271,6 +1299,12 @@ const App: React.FC = () => {
         onDelete={handleDeleteAnalysis}
       />
 
+      <LiveConversationModal
+        isOpen={isLiveConversationOpen}
+        onClose={() => setIsLiveConversationOpen(false)}
+        onTasksCreated={handleAITasksCreation}
+      />
+
       {isFilterModalOpen && <FilterModal />}
 
       {/* Mobile Drawer */}
@@ -1328,13 +1362,22 @@ const App: React.FC = () => {
                     <span className="hidden sm:inline">Filtros</span>
                 </button>
                 {!showArchived && (
-                    <button
-                        onClick={handleAddTask}
-                        className="hidden lg:flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-teal-700 transition-transform transform hover:scale-105 shadow-lg"
-                    >
-                        <PlusIcon />
-                        <span>Nova Tarefa</span>
-                    </button>
+                    <>
+                        <button
+                            onClick={() => setIsLiveConversationOpen(true)}
+                            className="flex items-center justify-center gap-2 bg-gradient-to-r from-teal-500 to-blue-600 text-white font-semibold px-3 sm:px-4 py-2 rounded-lg hover:from-teal-600 hover:to-blue-700 transition-all transform hover:scale-105 shadow-lg"
+                        >
+                            <MicrophoneIcon />
+                            <span className="hidden sm:inline">Criar com IA</span>
+                        </button>
+                        <button
+                            onClick={handleAddTask}
+                            className="hidden lg:flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-teal-700 transition-transform transform hover:scale-105 shadow-lg"
+                        >
+                            <PlusIcon />
+                            <span>Nova Tarefa</span>
+                        </button>
+                    </>
                 )}
             </div>
           </header>
