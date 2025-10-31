@@ -624,16 +624,18 @@ const App: React.FC = () => {
         
         function setCompletionRecursively(items: SubItemBlock[]): SubItemBlock[];
         function setCompletionRecursively(items: ContentBlock[]): ContentBlock[];
-        function setCompletionRecursively(items: ContentBlock[]): ContentBlock[] {
+        // FIX: The implementation signature was not compatible with the overloads.
+        // The implementation returned `ContentBlock[]`, which is not assignable to `SubItemBlock[]` from the first overload.
+        // Changing the return type to `any[]` fixes this, as `any[]` is assignable to both `SubItemBlock[]` and `ContentBlock[]`.
+        function setCompletionRecursively(items: ContentBlock[]): any[] {
             return items.map(item => {
                 if (item.type === 'subitem') {
                     return {
                         ...item,
                         completed: shouldBeCompleted,
-                        // Fix: The recursive call to `setCompletionRecursively` was returning `ContentBlock[]`
-                        // which is not assignable to `SubItemBlock['children']` (`SubItemBlock[]`).
-                        // Casting the result to `SubItemBlock[]` resolves the type mismatch.
-                        children: setCompletionRecursively(item.children) as SubItemBlock[]
+                        // FIX: With the implementation signature fixed, the recursive call resolves to the correct overload
+                        // and the explicit cast is no longer needed, resolving the type error.
+                        children: setCompletionRecursively(item.children)
                     };
                 }
                 return item;
@@ -956,7 +958,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-800 transition-colors duration-300">
+    <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-200 transition-colors duration-300">
       <div className={`fixed inset-0 z-30 bg-black/50 lg:hidden ${isSidebarOpen ? 'block' : 'hidden'}`} onClick={() => setIsSidebarOpen(false)}></div>
       <aside className={`fixed top-0 left-0 h-full w-72 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg border-r border-gray-200 dark:border-gray-700/50 p-6 z-40 transform transition-transform lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebar
@@ -1007,7 +1009,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2">
                 <button
                     onClick={() => setIsLiveConversationOpen(true)}
-                    className="p-2.5 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    className="p-2.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                     title="Criar tarefa com IA"
                 >
                     <MicrophoneIcon />
@@ -1015,14 +1017,14 @@ const App: React.FC = () => {
                 <div className="hidden sm:flex items-center gap-2">
                     <button
                         onClick={() => setLayoutMode('grid')}
-                        className={`p-2.5 rounded-lg transition-colors ${layoutMode === 'grid' ? 'bg-teal-500 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                        className={`p-2.5 rounded-lg transition-colors ${layoutMode === 'grid' ? 'bg-teal-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                         title="Visualização em Grade"
                     >
                         <ViewGridIcon />
                     </button>
                     <button
                         onClick={() => setLayoutMode('list')}
-                        className={`p-2.5 rounded-lg transition-colors ${layoutMode === 'list' ? 'bg-teal-500 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                        className={`p-2.5 rounded-lg transition-colors ${layoutMode === 'list' ? 'bg-teal-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                         title="Visualização em Lista"
                     >
                         <ViewListIcon />
