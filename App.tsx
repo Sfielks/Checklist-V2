@@ -529,6 +529,10 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Could not load theme from localStorage", error);
     }
+    // If no theme is saved, use the system preference
+    if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
     return 'light';
   });
 
@@ -543,12 +547,35 @@ const App: React.FC = () => {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    try {
-      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-    } catch (error) {
-       console.error("Could not save theme to localStorage", error);
-    }
   }, [theme]);
+
+  // Effect for listening to system theme changes
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
+      // Check if the user has manually set a theme. If so, don't override it.
+      const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (savedTheme) {
+        return;
+      }
+      setTheme(e.matches ? 'dark' : 'light');
+    };
+
+    try {
+      mediaQuery.addEventListener('change', handleSystemThemeChange);
+    } catch (e) {
+      mediaQuery.addListener(handleSystemThemeChange);
+    }
+
+    return () => {
+      try {
+        mediaQuery.removeEventListener('change', handleSystemThemeChange);
+      } catch (e) {
+        mediaQuery.removeListener(handleSystemThemeChange);
+      }
+    };
+  }, []);
   
   // Debounced save effect
   useEffect(() => {
@@ -1129,6 +1156,15 @@ const App: React.FC = () => {
     setIsLiveConversationOpen(false); // Close modal after creation
   };
 
+  const handleThemeChange = (newTheme: Theme) => {
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+    } catch (error) {
+       console.error("Could not save theme to localStorage", error);
+    }
+    setTheme(newTheme);
+  };
+
 
   const filteredTasks = tasks.filter((task) => {
     const isArchivedMatch = showArchived ? task.archived : !task.archived;
@@ -1280,7 +1316,7 @@ const App: React.FC = () => {
         onImport={handleImportData}
         onReset={handleResetData}
         theme={theme}
-        onThemeChange={setTheme}
+        onThemeChange={handleThemeChange}
         notificationPermission={notificationPermission}
         onRequestNotificationPermission={handleRequestNotificationPermission}
       />
